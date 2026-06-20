@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Nofacast Clean'),
+    'name' => env('APP_NAME', 'Nofa Clean'),
 
     /*
     |--------------------------------------------------------------------------

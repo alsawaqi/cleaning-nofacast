@@ -40,6 +40,7 @@ class ServiceFactory extends Factory
                 ['label' => 'Mop floors'],
                 ['label' => 'Remove waste'],
             ],
+            'sla_kpi_template' => [],
             'is_active' => true,
         ];
     }

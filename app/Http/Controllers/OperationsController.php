@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\HandlesSarMoney;
 use App\Models\Assignment;
 use App\Models\AuditLog;
+use App\Models\BookingRequest;
 use App\Models\ChecklistItem;
 use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\CustomerSite;
+use App\Models\Invoice;
 use App\Models\Service;
+use App\Models\ServiceRequest;
 use App\Models\Visit;
 use App\Models\Worker;
 use App\Services\Operations\ScheduleGenerator;
@@ -18,6 +21,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -46,6 +50,12 @@ class OperationsController extends Controller
             ->orderBy('scheduled_for')
             ->orderBy('starts_at')
             ->get();
+        $noticeEnd = $date->copy()->addDay();
+        $noticeVisits = $this->visitQuery($filters)
+            ->whereBetween('scheduled_for', [$date->toDateString(), $noticeEnd->toDateString()])
+            ->orderBy('scheduled_for')
+            ->orderBy('starts_at')
+            ->get();
 
         $dailyVisits = $weeklyVisits
             ->filter(fn (Visit $visit): bool => $visit->scheduled_for?->toDateString() === $date->toDateString())
@@ -56,6 +66,7 @@ class OperationsController extends Controller
             ->orderBy('weekday')
             ->orderBy('starts_at')
             ->get();
+        $assignmentFollowUps = $this->assignmentFollowUps($weekStart, $weekEnd);
 
         return Inertia::render('Operations/Index', [
             'date' => $date->toDateString(),
@@ -67,10 +78,14 @@ class OperationsController extends Controller
             'availabilityBoard' => $this->availabilityBoard($date, $dailyVisits, $assignments),
             'workload' => $this->workload($assignments, $weeklyVisits),
             'dailyControl' => $this->dailyControl($date, $dailyVisits),
+            'assignmentFollowUps' => $assignmentFollowUps,
+            'contractActionBoard' => $this->contractActionBoard($date, $noticeVisits, $assignments, $assignmentFollowUps),
+            'paymentAttention' => $this->paymentAttention($date, $filters),
+            'bookingRequests' => $this->bookingRequestsBoard(),
+            'serviceRequests' => $this->serviceRequestsBoard(),
             'metrics' => [
                 'visitsToday' => $dailyVisits->count(),
                 'weeklyVisits' => $weeklyVisits->count(),
-                'activeAssignments' => Assignment::query()->where('status', 'active')->count(),
                 'workersScheduled' => $assignments->pluck('worker_id')->unique()->count(),
                 'completedThisWeek' => $weeklyVisits->where('status', 'completed')->count(),
                 'lateVisits' => $dailyVisits->filter(fn (Visit $visit): bool => $this->isLate($visit))->count(),
@@ -79,15 +94,12 @@ class OperationsController extends Controller
                 'awaitingAcknowledgement' => $dailyVisits->filter(fn (Visit $visit): bool => $this->requiresAcknowledgement($visit))->count(),
                 'pendingOvertime' => $dailyVisits->where('overtime_status', 'pending_approval')->count(),
             ],
-            'contractOptions' => $this->contractOptions(),
             'workerOptions' => $this->workerOptions(),
             'customerOptions' => $this->customerOptions(),
             'siteOptions' => $this->siteOptions(),
-            'serviceOptions' => $this->serviceOptions(),
             'statusOptions' => $this->statusOptions(),
             'overtimeStatuses' => $this->overtimeStatuses(),
             'weekdayOptions' => $this->weekdayOptions(),
-            'assignmentStatuses' => $this->assignmentStatuses(),
         ]);
     }
 
@@ -103,7 +115,13 @@ class OperationsController extends Controller
             'ends_at' => ['required', 'date_format:H:i', 'after:starts_at'],
             'share_percent' => ['required', 'integer', 'min:1', 'max:100'],
             'status' => ['required', Rule::in(array_column($this->assignmentStatuses(), 'key'))],
+            'team_role' => ['nullable', Rule::in(['main', 'support'])],
+            'task_instructions' => ['array', 'max:30'],
+            'task_instructions.*.label' => ['required', 'string', 'max:180'],
+            'task_instructions.*.is_required' => ['nullable', 'boolean'],
         ]);
+        $validated['team_role'] = $validated['team_role'] ?? 'main';
+        $validated['task_instructions'] = $this->normalizeTaskInstructions($validated['task_instructions'] ?? []);
 
         $contract = Contract::query()->findOrFail($validated['contract_id']);
         $errors = [
@@ -136,6 +154,30 @@ class OperationsController extends Controller
         ]);
 
         return back()->with('success', __('Assignment created.'));
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $tasks
+     * @return list<array{label: string, is_required: bool}>
+     */
+    private function normalizeTaskInstructions(array $tasks): array
+    {
+        return collect($tasks)
+            ->map(function (array $task): ?array {
+                $label = trim((string) ($task['label'] ?? ''));
+
+                if ($label === '') {
+                    return null;
+                }
+
+                return [
+                    'label' => $label,
+                    'is_required' => (bool) ($task['is_required'] ?? true),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 
     public function generateVisits(Request $request, ScheduleGenerator $schedule): RedirectResponse
@@ -193,6 +235,10 @@ class OperationsController extends Controller
         $visit->forceFill([
             'status' => 'completed',
             'checked_out_at' => now(),
+            'completion_review_status' => 'pending_review',
+            'completion_reviewed_at' => null,
+            'completion_reviewed_by' => null,
+            'completion_review_note' => null,
         ])->save();
 
         return back();
@@ -249,6 +295,10 @@ class OperationsController extends Controller
             'billable_overtime_halalas' => $billableOvertimeHalalas,
             'gross_profit_halalas' => $grossProfitHalalas,
             'execution_notes' => $validated['execution_notes'] ?? null,
+            'completion_review_status' => 'pending_review',
+            'completion_reviewed_at' => null,
+            'completion_reviewed_by' => null,
+            'completion_review_note' => null,
         ])->save();
 
         $this->audit($request, 'visit.execution_updated', $visit, $old, $visit->only($this->executionFields()));
@@ -316,17 +366,42 @@ class OperationsController extends Controller
             'supervisor_note' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $old = $visit->only(['supervisor_acknowledged_at', 'supervisor_acknowledged_by', 'supervisor_note']);
-
-        $visit->forceFill([
-            'supervisor_acknowledged_at' => now(),
-            'supervisor_acknowledged_by' => $request->user()?->id,
-            'supervisor_note' => $validated['supervisor_note'] ?? null,
-        ])->save();
-
-        $this->audit($request, 'visit.acknowledged', $visit, $old, $visit->only(['supervisor_acknowledged_at', 'supervisor_acknowledged_by', 'supervisor_note']));
+        $this->applyCompletionReview(
+            $request,
+            $visit,
+            'approved',
+            $validated['supervisor_note'] ?? null,
+            null,
+            null,
+            false,
+            'visit.acknowledged',
+        );
 
         return back()->with('success', __('Visit acknowledged.'));
+    }
+
+    public function reviewCompletion(Request $request, Visit $visit): RedirectResponse
+    {
+        $validated = $request->validate([
+            'decision' => ['required', Rule::in(['approved', 'needs_correction'])],
+            'supervisor_note' => ['nullable', 'string', 'max:1000'],
+            'quality_status' => ['nullable', Rule::in(array_column($this->qualityStatuses(), 'key'))],
+            'quality_score' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'create_follow_up' => ['nullable', 'boolean'],
+        ]);
+
+        $this->applyCompletionReview(
+            $request,
+            $visit,
+            $validated['decision'],
+            $validated['supervisor_note'] ?? null,
+            $validated['quality_status'] ?? null,
+            $validated['quality_score'] ?? null,
+            (bool) ($validated['create_follow_up'] ?? false),
+            'visit.completion_reviewed',
+        );
+
+        return back()->with('success', __('Visit completion reviewed.'));
     }
 
     public function updateChecklistItem(Request $request, ChecklistItem $checklistItem): RedirectResponse
@@ -351,13 +426,58 @@ class OperationsController extends Controller
         return back()->with('success', __('Checklist evidence updated.'));
     }
 
+    private function applyCompletionReview(
+        Request $request,
+        Visit $visit,
+        string $decision,
+        ?string $note,
+        ?string $qualityStatus,
+        ?int $qualityScore,
+        bool $createFollowUp,
+        string $auditAction
+    ): void {
+        if ($visit->status !== 'completed') {
+            throw ValidationException::withMessages([
+                'decision' => __('Only completed visits can be reviewed.'),
+            ]);
+        }
+
+        $old = $visit->only($this->completionReviewFields());
+        $reviewedAt = now();
+        $reviewerId = $request->user()?->id;
+        $qualityStatus ??= $decision === 'approved' ? 'passed' : 'needs_correction';
+        $followUpRequired = $createFollowUp || $qualityStatus === 'customer_follow_up';
+
+        $visit->forceFill([
+            'completion_review_status' => $decision,
+            'completion_reviewed_at' => $reviewedAt,
+            'completion_reviewed_by' => $reviewerId,
+            'completion_review_note' => $note,
+            'supervisor_acknowledged_at' => $decision === 'approved' ? $reviewedAt : null,
+            'supervisor_acknowledged_by' => $decision === 'approved' ? $reviewerId : null,
+            'supervisor_note' => $note,
+            'quality_status' => $qualityStatus,
+            'quality_score' => $qualityScore,
+            'quality_reviewed_at' => $reviewedAt,
+            'quality_reviewed_by' => $reviewerId,
+            'quality_notes' => $note,
+            'quality_follow_up_required' => $followUpRequired,
+        ])->save();
+
+        if ($followUpRequired) {
+            $this->createQualityFollowUp($visit, 'high', 'Quality follow-up required', $note);
+        }
+
+        $this->audit($request, $auditAction, $visit, $old, $visit->only($this->completionReviewFields()));
+    }
+
     /**
      * @param  array<string, mixed>  $filters
      */
     private function visitQuery(array $filters)
     {
         return Visit::query()
-            ->with(['contract', 'worker', 'site.customer', 'service', 'checklistItems', 'acknowledgedBy'])
+            ->with(['contract', 'worker', 'site.customer', 'service', 'checklistItems', 'acknowledgedBy', 'completionReviewedBy', 'qualityReviewedBy', 'feedback'])
             ->when($filters['worker_id'] ?? null, fn ($query, $workerId) => $query->where('worker_id', $workerId))
             ->when($filters['customer_site_id'] ?? null, fn ($query, $siteId) => $query->where('customer_site_id', $siteId))
             ->when($filters['customer_id'] ?? null, fn ($query, $customerId) => $query->whereHas('site', fn ($siteQuery) => $siteQuery->where('customer_id', $customerId)))
@@ -401,6 +521,13 @@ class OperationsController extends Controller
                 'photo_count' => $dailyVisits->sum(fn (Visit $visit): int => count($visit->photos ?? [])),
                 'checklist_done' => $dailyVisits->sum(fn (Visit $visit): int => $visit->checklistItems->where('status', 'done')->count()),
                 'checklist_pending' => $dailyVisits->sum(fn (Visit $visit): int => $visit->checklistItems->where('status', 'pending')->count()),
+                'pending_reviews' => $dailyVisits->filter(fn (Visit $visit): bool => $this->requiresAcknowledgement($visit))->count(),
+                'approved_reviews' => $dailyVisits->filter(fn (Visit $visit): bool => $this->completionReviewStatus($visit) === 'approved')->count(),
+                'corrections_requested' => $dailyVisits->filter(fn (Visit $visit): bool => $this->completionReviewStatus($visit) === 'needs_correction')->count(),
+                'quality_reviews' => $dailyVisits->filter(fn (Visit $visit): bool => $visit->quality_reviewed_at !== null || filled($visit->quality_status))->count(),
+                'quality_passed' => $dailyVisits->where('quality_status', 'passed')->count(),
+                'quality_failed' => $dailyVisits->filter(fn (Visit $visit): bool => in_array($visit->quality_status, ['failed', 'needs_correction'], true))->count(),
+                'quality_follow_ups' => $dailyVisits->filter(fn (Visit $visit): bool => $visit->quality_follow_up_required || $visit->quality_status === 'customer_follow_up')->count(),
             ],
             'costControl' => [
                 'planned_revenue_halalas' => $dailyVisits->sum('planned_revenue_halalas'),
@@ -412,6 +539,616 @@ class OperationsController extends Controller
                 'pending_overtime' => $dailyVisits->where('overtime_status', 'pending_approval')->count(),
             ],
         ];
+    }
+
+    private function assignmentFollowUps(Carbon $weekStart, Carbon $weekEnd): array
+    {
+        $contracts = Contract::query()
+            ->with([
+                'customer',
+                'site.customer',
+                'service',
+                'assignments' => fn ($query) => $query
+                    ->with(['worker', 'service'])
+                    ->orderBy('weekday')
+                    ->orderBy('starts_at'),
+            ])
+            ->where('status', 'active')
+            ->where('visits_per_week', '>', 0)
+            ->whereDate('starts_on', '<=', $weekEnd->toDateString())
+            ->where(function ($query) use ($weekStart): void {
+                $query->whereNull('ends_on')
+                    ->orWhereDate('ends_on', '>=', $weekStart->toDateString());
+            })
+            ->orderBy('starts_on')
+            ->orderBy('reference')
+            ->get();
+
+        $items = $contracts
+            ->map(fn (Contract $contract): array => $this->assignmentFollowUpItem($contract, $weekStart, $weekEnd))
+            ->sortBy([
+                ['open_items', 'desc'],
+                ['next_due_on', 'asc'],
+                ['contract.reference', 'asc'],
+            ])
+            ->values();
+
+        return [
+            'week_start' => $weekStart->toDateString(),
+            'week_end' => $weekEnd->toDateString(),
+            'summary' => [
+                'contracts_due' => $items->count(),
+                'open_items' => $items->sum('open_items'),
+                'missing_visit_slots' => $items->sum('missing_visit_slots'),
+                'missing_main_worker_slots' => $items->sum('missing_main_worker_slots'),
+                'understaffed_slots' => $items->sum('understaffed_slots'),
+                'ready_contracts' => $items->where('open_items', 0)->count(),
+            ],
+            'items' => $items->all(),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Visit>  $noticeVisits
+     * @param  Collection<int, Assignment>  $assignments
+     * @param  array<string, mixed>  $assignmentFollowUps
+     * @return array<string, mixed>
+     */
+    private function contractActionBoard(Carbon $date, Collection $noticeVisits, Collection $assignments, array $assignmentFollowUps): array
+    {
+        $windowEnd = $date->copy()->addDay();
+        $noticeDates = collect([
+            $date->toDateString() => 'today',
+            $windowEnd->toDateString() => 'tomorrow',
+        ]);
+        $followUpsByContract = collect($assignmentFollowUps['items'] ?? [])
+            ->keyBy(fn (array $item): int => (int) data_get($item, 'contract.id'));
+        $seeds = collect();
+
+        foreach ($noticeVisits as $visit) {
+            if ($visit->contract_id && $visit->scheduled_for) {
+                $seeds->push([
+                    'contract_id' => (int) $visit->contract_id,
+                    'date' => $visit->scheduled_for->toDateString(),
+                ]);
+            }
+        }
+
+        foreach ($assignments as $assignment) {
+            $assignmentDate = $this->assignmentNoticeDate($assignment, $date, $windowEnd);
+
+            if ($assignment->contract_id && $assignmentDate) {
+                $seeds->push([
+                    'contract_id' => (int) $assignment->contract_id,
+                    'date' => $assignmentDate->toDateString(),
+                ]);
+            }
+        }
+
+        foreach ($followUpsByContract as $contractId => $followUp) {
+            $nextDueOn = (string) ($followUp['next_due_on'] ?? '');
+
+            if ($noticeDates->has($nextDueOn)) {
+                $seeds->push([
+                    'contract_id' => (int) $contractId,
+                    'date' => $nextDueOn,
+                ]);
+            }
+        }
+
+        $seeds = $seeds
+            ->filter(fn (array $seed): bool => $noticeDates->has($seed['date']))
+            ->unique(fn (array $seed): string => $seed['contract_id'].'|'.$seed['date'])
+            ->values();
+        $contractIds = $seeds->pluck('contract_id')->unique()->values();
+        $contracts = $contractIds->isEmpty()
+            ? collect()
+            : Contract::query()
+                ->with(['customer', 'site.customer', 'service'])
+                ->whereIn('id', $contractIds->all())
+                ->get()
+                ->keyBy('id');
+
+        $items = $seeds
+            ->map(function (array $seed) use ($noticeVisits, $assignments, $contracts, $followUpsByContract, $noticeDates, $date, $windowEnd): ?array {
+                /** @var Contract|null $contract */
+                $contract = $contracts->get($seed['contract_id']);
+
+                if (! $contract) {
+                    return null;
+                }
+
+                $noticeDate = (string) $seed['date'];
+                $dayVisits = $noticeVisits
+                    ->filter(fn (Visit $visit): bool => (int) $visit->contract_id === (int) $contract->id
+                        && $visit->scheduled_for?->toDateString() === $noticeDate)
+                    ->values();
+                $dayAssignments = $assignments
+                    ->filter(function (Assignment $assignment) use ($contract, $noticeDate, $date, $windowEnd): bool {
+                        $assignmentDate = $this->assignmentNoticeDate($assignment, $date, $windowEnd);
+
+                        return (int) $assignment->contract_id === (int) $contract->id
+                            && $assignmentDate?->toDateString() === $noticeDate;
+                    })
+                    ->values();
+                $followUp = $followUpsByContract->get($contract->id);
+                $startsAt = $this->firstTime($dayVisits->pluck('starts_at')->merge($dayAssignments->pluck('starts_at')));
+                $endsAt = $this->lastTime($dayVisits->pluck('ends_at')->merge($dayAssignments->pluck('ends_at')));
+                $workers = $dayVisits
+                    ->pluck('worker')
+                    ->merge($dayAssignments->pluck('worker'))
+                    ->filter()
+                    ->unique('id')
+                    ->map(fn (Worker $worker): array => $this->serializeWorker($worker))
+                    ->values()
+                    ->all();
+                $openItems = (int) ($followUp['open_items'] ?? 0);
+
+                return [
+                    'notice_date' => $noticeDate,
+                    'notice_key' => $noticeDates->get($noticeDate),
+                    'severity' => $this->contractActionSeverity($followUp),
+                    'contract' => $this->serializeContractSummary($contract, 'assignments'),
+                    'action_url' => "/app/contracts/{$contract->id}?panel=assignments",
+                    'starts_at' => $startsAt,
+                    'ends_at' => $endsAt,
+                    'visits_count' => $dayVisits->count(),
+                    'assignment_slots_count' => $dayAssignments
+                        ->unique(fn (Assignment $assignment): string => $this->assignmentSlotKey($assignment))
+                        ->count(),
+                    'assigned_workers_count' => count($workers),
+                    'task_count' => $dayAssignments->sum(fn (Assignment $assignment): int => count($assignment->task_instructions ?? []))
+                        + $dayVisits->sum(fn (Visit $visit): int => $visit->checklistItems->count()),
+                    'open_items' => $openItems,
+                    'missing_visit_slots' => (int) ($followUp['missing_visit_slots'] ?? 0),
+                    'missing_main_worker_slots' => (int) ($followUp['missing_main_worker_slots'] ?? 0),
+                    'understaffed_slots' => (int) ($followUp['understaffed_slots'] ?? 0),
+                    'follow_ups' => $followUp['follow_ups'] ?? [],
+                    'workers' => $workers,
+                ];
+            })
+            ->filter()
+            ->sortBy(fn (array $item): string => $item['notice_date'].'|'.($item['starts_at'] ?? '99:99').'|'.$item['contract']['reference'])
+            ->values();
+
+        return [
+            'window_start' => $date->toDateString(),
+            'window_end' => $windowEnd->toDateString(),
+            'summary' => [
+                'total_contracts' => $items->count(),
+                'today_count' => $items->where('notice_key', 'today')->count(),
+                'tomorrow_count' => $items->where('notice_key', 'tomorrow')->count(),
+                'open_items' => $items->sum('open_items'),
+            ],
+            'items' => $items->all(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    private function paymentAttention(Carbon $date, array $filters): array
+    {
+        $windowEnd = $date->copy()->addDay();
+        $invoices = Invoice::query()
+            ->with(['contract.customer', 'contract.site.customer', 'contract.service', 'customer', 'creditNotes'])
+            ->whereNotIn('status', ['paid', 'void', 'cancelled'])
+            ->whereDate('due_date', '<=', $windowEnd->toDateString())
+            ->when($filters['customer_id'] ?? null, fn ($query, $customerId) => $query->where('customer_id', $customerId))
+            ->when($filters['customer_site_id'] ?? null, fn ($query, $siteId) => $query->where('customer_site_id', $siteId))
+            ->orderBy('due_date')
+            ->orderBy('number')
+            ->get()
+            ->filter(fn (Invoice $invoice): bool => $invoice->balance_halalas > 0)
+            ->values();
+        $items = $invoices
+            ->map(fn (Invoice $invoice): array => $this->paymentAttentionItem($invoice, $date, $windowEnd))
+            ->sortBy(fn (array $item): string => ($item['severity'] === 'danger' ? '0' : '1').'|'.$item['invoice']['due_date'].'|'.$item['invoice']['number'])
+            ->values();
+
+        return [
+            'window_start' => $date->toDateString(),
+            'window_end' => $windowEnd->toDateString(),
+            'summary' => [
+                'overdue_count' => $items->where('due_label', 'overdue')->count(),
+                'due_soon_count' => $items->whereIn('due_label', ['today', 'tomorrow'])->count(),
+                'outstanding_halalas' => $items->sum('invoice.balance_halalas'),
+            ],
+            'items' => $items->all(),
+        ];
+    }
+
+    private function bookingRequestsBoard(): array
+    {
+        $items = BookingRequest::query()
+            ->with(['customer', 'site', 'service', 'servicePackage'])
+            ->whereIn('status', ['pending', 'approved'])
+            ->orderByRaw("CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END")
+            ->orderBy('requested_for')
+            ->orderBy('starts_at')
+            ->limit(40)
+            ->get()
+            ->map(fn (BookingRequest $bookingRequest): array => $this->bookingRequestItem($bookingRequest))
+            ->values();
+
+        return [
+            'summary' => [
+                'pending_count' => BookingRequest::query()->where('status', 'pending')->count(),
+                'approved_count' => BookingRequest::query()->where('status', 'approved')->count(),
+                'converted_count' => BookingRequest::query()->where('status', 'converted')->count(),
+            ],
+            'items' => $items->all(),
+        ];
+    }
+
+    private function bookingRequestItem(BookingRequest $bookingRequest): array
+    {
+        return [
+            'id' => $bookingRequest->id,
+            'status' => $bookingRequest->status,
+            'requested_for' => $bookingRequest->requested_for?->toDateString(),
+            'starts_at' => $this->time($bookingRequest->starts_at),
+            'ends_at' => $this->time($bookingRequest->ends_at),
+            'worker_count' => $bookingRequest->worker_count,
+            'duration_minutes' => $bookingRequest->duration_minutes,
+            'customer_note' => $bookingRequest->customer_note,
+            'admin_note' => $bookingRequest->admin_note,
+            'customer' => $bookingRequest->customer ? [
+                'id' => $bookingRequest->customer->id,
+                'name' => $bookingRequest->customer->name,
+            ] : null,
+            'site' => $bookingRequest->site ? [
+                'id' => $bookingRequest->site->id,
+                'name' => $bookingRequest->site->name,
+                'city' => $bookingRequest->site->city,
+                'district' => $bookingRequest->site->district,
+            ] : null,
+            'service' => $bookingRequest->service ? [
+                'id' => $bookingRequest->service->id,
+                'title' => $bookingRequest->service->title,
+                'category' => $bookingRequest->service->category,
+            ] : null,
+            'service_package' => $bookingRequest->servicePackage ? [
+                'id' => $bookingRequest->servicePackage->id,
+                'name' => $bookingRequest->servicePackage->name,
+            ] : null,
+            'approve_url' => "/app/booking-requests/{$bookingRequest->id}/approve",
+            'reject_url' => "/app/booking-requests/{$bookingRequest->id}/reject",
+            'contract_create_url' => "/app/contracts/create?booking_request_id={$bookingRequest->id}",
+        ];
+    }
+
+    private function serviceRequestsBoard(): array
+    {
+        $items = ServiceRequest::query()
+            ->with(['customer', 'contract.customer', 'contract.site', 'contract.service', 'visit.worker', 'visit.feedback'])
+            ->whereIn('status', ['pending', 'in_review'])
+            ->orderByRaw("CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END")
+            ->orderBy('created_at')
+            ->limit(40)
+            ->get()
+            ->map(fn (ServiceRequest $serviceRequest): array => $this->serviceRequestItem($serviceRequest))
+            ->values();
+
+        return [
+            'summary' => [
+                'pending_count' => ServiceRequest::query()->where('status', 'pending')->count(),
+                'in_review_count' => ServiceRequest::query()->where('status', 'in_review')->count(),
+                'approved_count' => ServiceRequest::query()->where('status', 'approved')->count(),
+                'resolved_count' => ServiceRequest::query()->where('status', 'resolved')->count(),
+                'rejected_count' => ServiceRequest::query()->where('status', 'rejected')->count(),
+            ],
+            'items' => $items->all(),
+        ];
+    }
+
+    private function serviceRequestItem(ServiceRequest $serviceRequest): array
+    {
+        return [
+            'id' => $serviceRequest->id,
+            'type' => $serviceRequest->type,
+            'status' => $serviceRequest->status,
+            'priority' => $serviceRequest->priority,
+            'subject' => $serviceRequest->subject,
+            'description' => $serviceRequest->description,
+            'requested_for' => $serviceRequest->requested_for?->toDateString(),
+            'starts_at' => $this->time($serviceRequest->starts_at),
+            'ends_at' => $this->time($serviceRequest->ends_at),
+            'admin_note' => $serviceRequest->admin_note,
+            'created_at' => $serviceRequest->created_at?->toDateTimeString(),
+            'resolved_at' => $serviceRequest->resolved_at?->toDateTimeString(),
+            'customer' => $serviceRequest->customer ? [
+                'id' => $serviceRequest->customer->id,
+                'name' => $serviceRequest->customer->name,
+            ] : null,
+            'contract' => $serviceRequest->contract ? [
+                'id' => $serviceRequest->contract->id,
+                'reference' => $serviceRequest->contract->reference,
+                'status' => $serviceRequest->contract->status,
+                'detail_url' => "/app/contracts/{$serviceRequest->contract->id}",
+                'customer' => $serviceRequest->contract->customer ? [
+                    'id' => $serviceRequest->contract->customer->id,
+                    'name' => $serviceRequest->contract->customer->name,
+                ] : null,
+                'site' => $serviceRequest->contract->site ? [
+                    'id' => $serviceRequest->contract->site->id,
+                    'name' => $serviceRequest->contract->site->name,
+                    'city' => $serviceRequest->contract->site->city,
+                    'district' => $serviceRequest->contract->site->district,
+                ] : null,
+                'service' => $serviceRequest->contract->service ? [
+                    'id' => $serviceRequest->contract->service->id,
+                    'title' => $serviceRequest->contract->service->title,
+                    'category' => $serviceRequest->contract->service->category,
+                ] : null,
+            ] : null,
+            'visit' => $serviceRequest->visit ? [
+                'id' => $serviceRequest->visit->id,
+                'scheduled_for' => $serviceRequest->visit->scheduled_for?->toDateString(),
+                'starts_at' => $this->time($serviceRequest->visit->starts_at),
+                'ends_at' => $this->time($serviceRequest->visit->ends_at),
+                'status' => $serviceRequest->visit->status,
+                'worker' => $serviceRequest->visit->worker ? [
+                    'id' => $serviceRequest->visit->worker->id,
+                    'name' => $serviceRequest->visit->worker->name,
+                ] : null,
+                'feedback' => $serviceRequest->visit->feedback ? [
+                    'id' => $serviceRequest->visit->feedback->id,
+                    'rating' => $serviceRequest->visit->feedback->rating,
+                    'comment' => $serviceRequest->visit->feedback->comment,
+                    'submitted_at' => $serviceRequest->visit->feedback->submitted_at?->toDateTimeString(),
+                ] : null,
+            ] : null,
+            'approve_url' => "/app/service-requests/{$serviceRequest->id}/approve",
+            'reject_url' => "/app/service-requests/{$serviceRequest->id}/reject",
+            'in_review_url' => "/app/service-requests/{$serviceRequest->id}/in-review",
+            'resolve_url' => "/app/service-requests/{$serviceRequest->id}/resolve",
+        ];
+    }
+
+    private function assignmentNoticeDate(Assignment $assignment, Carbon $date, Carbon $windowEnd): ?Carbon
+    {
+        foreach ([$date, $windowEnd] as $candidate) {
+            if ((int) $assignment->weekday === (int) $candidate->dayOfWeekIso) {
+                return $candidate->copy();
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  Collection<int, mixed>  $times
+     */
+    private function firstTime(Collection $times): ?string
+    {
+        return $times
+            ->map(fn ($time): ?string => is_string($time) ? $this->time($time) : null)
+            ->filter()
+            ->sort()
+            ->first();
+    }
+
+    /**
+     * @param  Collection<int, mixed>  $times
+     */
+    private function lastTime(Collection $times): ?string
+    {
+        return $times
+            ->map(fn ($time): ?string => is_string($time) ? $this->time($time) : null)
+            ->filter()
+            ->sort()
+            ->last();
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $followUp
+     */
+    private function contractActionSeverity(?array $followUp): string
+    {
+        if ((int) ($followUp['missing_main_worker_slots'] ?? 0) > 0) {
+            return 'danger';
+        }
+
+        if ((int) ($followUp['open_items'] ?? 0) > 0) {
+            return 'warning';
+        }
+
+        return 'success';
+    }
+
+    private function paymentAttentionItem(Invoice $invoice, Carbon $date, Carbon $windowEnd): array
+    {
+        $dueDate = $invoice->due_date?->toDateString();
+        $dueLabel = 'today';
+        $daysOverdue = 0;
+        $severity = 'warning';
+
+        if ($invoice->due_date && $invoice->due_date->lt($date->copy()->startOfDay())) {
+            $dueLabel = 'overdue';
+            $daysOverdue = (int) $invoice->due_date->diffInDays($date);
+            $severity = 'danger';
+        } elseif ($dueDate === $windowEnd->toDateString()) {
+            $dueLabel = 'tomorrow';
+        }
+
+        return [
+            'severity' => $severity,
+            'due_label' => $dueLabel,
+            'days_overdue' => $daysOverdue,
+            'invoice' => [
+                'id' => $invoice->id,
+                'number' => $invoice->number,
+                'status' => $invoice->status,
+                'due_date' => $dueDate,
+                'gross_total_halalas' => (int) $invoice->gross_total_halalas,
+                'paid_total_halalas' => (int) $invoice->paid_total_halalas,
+                'balance_halalas' => (int) $invoice->balance_halalas,
+            ],
+            'contract' => $invoice->contract ? $this->serializeContractSummary($invoice->contract, 'finance') : null,
+            'customer' => $invoice->customer ? [
+                'id' => $invoice->customer->id,
+                'name' => $invoice->customer->name,
+            ] : null,
+            'action_url' => $invoice->contract_id ? "/app/contracts/{$invoice->contract_id}?panel=finance" : '/app/finance',
+        ];
+    }
+
+    private function serializeContractSummary(Contract $contract, string $panel): array
+    {
+        return [
+            'id' => $contract->id,
+            'reference' => $contract->reference,
+            'status' => $contract->status,
+            'starts_on' => $contract->starts_on?->toDateString(),
+            'ends_on' => $contract->ends_on?->toDateString(),
+            'detail_url' => "/app/contracts/{$contract->id}?panel={$panel}",
+            'customer' => $contract->customer ? [
+                'id' => $contract->customer->id,
+                'name' => $contract->customer->name,
+            ] : null,
+            'site' => $contract->site ? $this->serializeSite($contract->site) : null,
+            'service' => $contract->service ? [
+                'id' => $contract->service->id,
+                'title' => $contract->service->title,
+            ] : null,
+        ];
+    }
+
+    private function assignmentFollowUpItem(Contract $contract, Carbon $weekStart, Carbon $weekEnd): array
+    {
+        $requiredVisits = max(0, (int) ($contract->visits_per_week ?? 0));
+        $requiredWorkers = max(1, (int) ($contract->agreed_workers ?? 1));
+        $activeAssignments = $contract->assignments
+            ->where('status', 'active')
+            ->values();
+
+        $slots = $activeAssignments
+            ->groupBy(fn (Assignment $assignment): string => $this->assignmentSlotKey($assignment))
+            ->map(fn (Collection $assignments): array => $this->assignmentFollowUpSlot($assignments, $requiredWorkers))
+            ->sortBy([
+                ['weekday', 'asc'],
+                ['starts_at', 'asc'],
+                ['ends_at', 'asc'],
+            ])
+            ->values();
+
+        $missingVisitSlots = max(0, $requiredVisits - $slots->count());
+        $missingMainWorkerSlots = $slots->where('has_main_worker', false)->count();
+        $understaffedSlots = $slots->where('has_required_workers', false)->count();
+        $openItems = $missingVisitSlots + $missingMainWorkerSlots + $understaffedSlots;
+
+        return [
+            'contract' => [
+                'id' => $contract->id,
+                'reference' => $contract->reference,
+                'status' => $contract->status,
+                'starts_on' => $contract->starts_on?->toDateString(),
+                'ends_on' => $contract->ends_on?->toDateString(),
+                'detail_url' => "/app/contracts/{$contract->id}?panel=assignments",
+                'customer' => $contract->customer ? [
+                    'id' => $contract->customer->id,
+                    'name' => $contract->customer->name,
+                ] : null,
+                'site' => $contract->site ? $this->serializeSite($contract->site) : null,
+                'service' => $contract->service ? [
+                    'id' => $contract->service->id,
+                    'title' => $contract->service->title,
+                ] : null,
+            ],
+            'next_due_on' => $this->nextContractDueDate($contract, $activeAssignments, $weekStart, $weekEnd),
+            'severity' => $missingMainWorkerSlots > 0 ? 'danger' : ($openItems > 0 ? 'warning' : 'success'),
+            'open_items' => $openItems,
+            'required_visits_per_week' => $requiredVisits,
+            'covered_visits_per_week' => $slots->count(),
+            'missing_visit_slots' => $missingVisitSlots,
+            'required_workers_per_visit' => $requiredWorkers,
+            'ready_slots_count' => $slots->where('ready', true)->count(),
+            'missing_main_worker_slots' => $missingMainWorkerSlots,
+            'understaffed_slots' => $understaffedSlots,
+            'follow_ups' => $this->assignmentFollowUpTypes($missingVisitSlots, $missingMainWorkerSlots, $understaffedSlots),
+            'slots' => $slots->all(),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Assignment>  $assignments
+     */
+    private function assignmentFollowUpSlot(Collection $assignments, int $requiredWorkers): array
+    {
+        $firstAssignment = $assignments->first();
+        $mainAssignment = $assignments->firstWhere('team_role', 'main');
+        $workersCount = $assignments->pluck('worker_id')->unique()->count();
+        $hasMainWorker = $mainAssignment instanceof Assignment;
+        $hasRequiredWorkers = $workersCount >= $requiredWorkers;
+
+        return [
+            'key' => $this->assignmentSlotKey($firstAssignment),
+            'weekday' => (int) $firstAssignment->weekday,
+            'starts_at' => $this->time($firstAssignment->starts_at),
+            'ends_at' => $this->time($firstAssignment->ends_at),
+            'workers_count' => $workersCount,
+            'missing_support_workers' => max(0, $requiredWorkers - $workersCount),
+            'task_count' => $assignments->sum(fn (Assignment $assignment): int => count($assignment->task_instructions ?? [])),
+            'has_main_worker' => $hasMainWorker,
+            'has_required_workers' => $hasRequiredWorkers,
+            'ready' => $hasMainWorker && $hasRequiredWorkers,
+            'main_worker' => $mainAssignment?->worker ? $this->serializeWorker($mainAssignment->worker) : null,
+            'workers' => $assignments
+                ->map(fn (Assignment $assignment): array => [
+                    'assignment_id' => $assignment->id,
+                    'team_role' => $assignment->team_role ?? 'main',
+                    'worker' => $assignment->worker ? $this->serializeWorker($assignment->worker) : null,
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    private function assignmentSlotKey(Assignment $assignment): string
+    {
+        return implode('|', [
+            $assignment->weekday,
+            $this->time($assignment->starts_at),
+            $this->time($assignment->ends_at),
+            $assignment->service_id ?? 'none',
+        ]);
+    }
+
+    private function assignmentFollowUpTypes(int $missingVisitSlots, int $missingMainWorkerSlots, int $understaffedSlots): array
+    {
+        return collect([
+            $missingVisitSlots > 0 ? ['type' => 'missing_visit_slots', 'severity' => 'warning', 'count' => $missingVisitSlots] : null,
+            $missingMainWorkerSlots > 0 ? ['type' => 'missing_main_worker', 'severity' => 'danger', 'count' => $missingMainWorkerSlots] : null,
+            $understaffedSlots > 0 ? ['type' => 'team_understaffed', 'severity' => 'warning', 'count' => $understaffedSlots] : null,
+        ])->filter()->values()->all();
+    }
+
+    /**
+     * @param  Collection<int, Assignment>  $assignments
+     */
+    private function nextContractDueDate(Contract $contract, Collection $assignments, Carbon $weekStart, Carbon $weekEnd): string
+    {
+        $start = $weekStart->copy();
+
+        if ($contract->starts_on && $contract->starts_on->greaterThan($start)) {
+            $start = $contract->starts_on->copy();
+        }
+
+        $weekdays = $assignments
+            ->pluck('weekday')
+            ->filter()
+            ->unique()
+            ->values();
+
+        for ($date = $start->copy(); $date->lte($weekEnd); $date->addDay()) {
+            if ($weekdays->isEmpty() || $weekdays->contains($date->dayOfWeekIso)) {
+                return $date->toDateString();
+            }
+        }
+
+        return $start->toDateString();
     }
 
     private function dailyAlert(Visit $visit): ?array
@@ -430,6 +1167,14 @@ class OperationsController extends Controller
 
         if ($visit->overtime_status === 'pending_approval') {
             return $this->alert($visit, 'overtime', 'Overtime pending', 'Actual work exceeded planned time and needs approval.', 'warning');
+        }
+
+        if ($this->completionReviewStatus($visit) === 'needs_correction') {
+            return $this->alert($visit, 'correction', 'Correction requested', 'Supervisor requested corrected visit evidence before approval.', 'warning');
+        }
+
+        if ($visit->quality_follow_up_required || $visit->quality_status === 'customer_follow_up') {
+            return $this->alert($visit, 'quality_follow_up', 'Quality follow-up', 'Supervisor marked this visit for customer follow-up.', 'warning');
         }
 
         return null;
@@ -468,11 +1213,15 @@ class OperationsController extends Controller
             return 3;
         }
 
-        if ($visit->overtime_status === 'pending_approval') {
+        if ($this->completionReviewStatus($visit) === 'needs_correction') {
             return 4;
         }
 
-        return 5;
+        if ($visit->overtime_status === 'pending_approval') {
+            return 5;
+        }
+
+        return 6;
     }
 
     private function isLate(Visit $visit): bool
@@ -500,7 +1249,16 @@ class OperationsController extends Controller
 
     private function requiresAcknowledgement(Visit $visit): bool
     {
-        return $visit->status === 'completed' && $visit->supervisor_acknowledged_at === null;
+        return $visit->status === 'completed' && $this->completionReviewStatus($visit) === 'pending_review';
+    }
+
+    private function completionReviewStatus(Visit $visit): string
+    {
+        if ($visit->completion_review_status) {
+            return $visit->completion_review_status;
+        }
+
+        return $visit->supervisor_acknowledged_at ? 'approved' : 'pending_review';
     }
 
     private function scheduledDateTime(Visit $visit, ?string $time): ?Carbon
@@ -632,7 +1390,7 @@ class OperationsController extends Controller
     private function availabilityEvents(Carbon $date, Collection $dailyVisits, Collection $assignments): Collection
     {
         $visitAssignmentIds = $dailyVisits->pluck('assignment_id')->filter()->unique();
-        $visitEvents = $dailyVisits
+        $visitEvents = collect($dailyVisits
             ->filter(fn (Visit $visit): bool => $visit->worker !== null)
             ->map(fn (Visit $visit): array => [
                 'id' => 'visit-'.$visit->id,
@@ -651,9 +1409,11 @@ class OperationsController extends Controller
                     'id' => $visit->contract->id,
                     'reference' => $visit->contract->reference,
                 ] : null,
-            ]);
+            ])
+            ->values()
+            ->all());
 
-        $assignmentEvents = $assignments
+        $assignmentEvents = collect($assignments
             ->where('weekday', $date->dayOfWeekIso)
             ->filter(fn (Assignment $assignment): bool => $assignment->status === 'active' && ! $visitAssignmentIds->contains($assignment->id))
             ->map(fn (Assignment $assignment): array => [
@@ -673,7 +1433,9 @@ class OperationsController extends Controller
                     'id' => $assignment->contract->id,
                     'reference' => $assignment->contract->reference,
                 ] : null,
-            ]);
+            ])
+            ->values()
+            ->all());
 
         return $visitEvents
             ->merge($assignmentEvents)
@@ -883,6 +1645,51 @@ class OperationsController extends Controller
     }
 
     /**
+     * @return list<string>
+     */
+    private function completionReviewFields(): array
+    {
+        return [
+            'supervisor_acknowledged_at',
+            'supervisor_acknowledged_by',
+            'supervisor_note',
+            'completion_review_status',
+            'completion_reviewed_at',
+            'completion_reviewed_by',
+            'completion_review_note',
+            'quality_status',
+            'quality_score',
+            'quality_reviewed_at',
+            'quality_reviewed_by',
+            'quality_notes',
+            'quality_follow_up_required',
+        ];
+    }
+
+    private function createQualityFollowUp(Visit $visit, string $priority, string $subject, ?string $description): ServiceRequest
+    {
+        $visit->loadMissing('contract');
+
+        return ServiceRequest::query()->firstOrCreate(
+            [
+                'type' => 'quality_follow_up',
+                'visit_id' => $visit->id,
+            ],
+            [
+                'status' => 'pending',
+                'priority' => $priority,
+                'customer_id' => (int) $visit->contract->customer_id,
+                'contract_id' => (int) $visit->contract_id,
+                'subject' => $subject,
+                'description' => $description ?: __('Supervisor requested quality follow-up for this visit.'),
+                'requested_for' => $visit->scheduled_for?->toDateString(),
+                'starts_at' => $this->time($visit->starts_at),
+                'ends_at' => $this->time($visit->ends_at),
+            ],
+        );
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     private function contractOptions(): array
@@ -1033,6 +1840,19 @@ class OperationsController extends Controller
         ];
     }
 
+    /**
+     * @return list<array{key: string, label: string}>
+     */
+    private function qualityStatuses(): array
+    {
+        return [
+            ['key' => 'passed', 'label' => 'Passed'],
+            ['key' => 'failed', 'label' => 'Failed'],
+            ['key' => 'needs_correction', 'label' => 'Needs correction'],
+            ['key' => 'customer_follow_up', 'label' => 'Customer follow-up'],
+        ];
+    }
+
     private function serializeVisit(Visit $visit): array
     {
         return [
@@ -1043,6 +1863,8 @@ class OperationsController extends Controller
             'status' => $visit->status,
             'checked_in_at' => $visit->checked_in_at?->toDateTimeString(),
             'checked_out_at' => $visit->checked_out_at?->toDateTimeString(),
+            'check_in_location' => $this->locationPayload($visit, 'check_in'),
+            'check_out_location' => $this->locationPayload($visit, 'check_out'),
             'planned_minutes' => $visit->planned_minutes ?: $this->durationMinutes($visit->starts_at, $visit->ends_at),
             'actual_minutes' => $visit->actual_minutes,
             'variance_minutes' => $visit->variance_minutes,
@@ -1061,8 +1883,19 @@ class OperationsController extends Controller
             'requires_acknowledgement' => $this->requiresAcknowledgement($visit),
             'issue_note' => $visit->issue_note,
             'photos' => $visit->photos ?? [],
+            'photo_urls' => collect($visit->photos ?? [])
+                ->map(fn (string $path): string => $this->publicEvidenceUrl($path))
+                ->values(),
             'supervisor_acknowledged_at' => $visit->supervisor_acknowledged_at?->toDateTimeString(),
             'supervisor_note' => $visit->supervisor_note,
+            'completion_review_status' => $this->completionReviewStatus($visit),
+            'completion_reviewed_at' => $visit->completion_reviewed_at?->toDateTimeString(),
+            'completion_review_note' => $visit->completion_review_note,
+            'completion_reviewed_by' => $visit->completionReviewedBy ? [
+                'id' => $visit->completionReviewedBy->id,
+                'name' => $visit->completionReviewedBy->name,
+            ] : null,
+            'evidence_review' => $this->evidenceReviewPayload($visit),
             'acknowledged_by' => $visit->acknowledgedBy ? [
                 'id' => $visit->acknowledgedBy->id,
                 'name' => $visit->acknowledgedBy->name,
@@ -1079,9 +1912,80 @@ class OperationsController extends Controller
                 'status' => $item->status,
                 'notes' => $item->notes,
                 'photo_path' => $item->photo_path,
+                'photo_url' => $item->photo_path ? $this->publicEvidenceUrl($item->photo_path) : null,
                 'completed_at' => $item->completed_at?->toDateTimeString(),
             ])->values(),
         ];
+    }
+
+    private function evidenceReviewPayload(Visit $visit): array
+    {
+        $checklist = $visit->checklistItems;
+        $reviewer = $visit->completionReviewedBy ?: $visit->acknowledgedBy;
+        $qualityReviewer = $visit->qualityReviewedBy ?: $reviewer;
+        $feedback = $visit->feedback;
+        $photoCount = count($visit->photos ?? []) + $checklist->whereNotNull('photo_path')->count();
+
+        return [
+            'status' => $this->completionReviewStatus($visit),
+            'needs_review' => $this->requiresAcknowledgement($visit),
+            'reviewed_at' => $visit->completion_reviewed_at?->toDateTimeString()
+                ?: $visit->supervisor_acknowledged_at?->toDateTimeString(),
+            'review_note' => $visit->completion_review_note ?: $visit->supervisor_note,
+            'reviewed_by' => $reviewer ? [
+                'id' => $reviewer->id,
+                'name' => $reviewer->name,
+            ] : null,
+            'photo_count' => $photoCount,
+            'checklist_total' => $checklist->count(),
+            'checklist_done' => $checklist->where('status', 'done')->count(),
+            'checklist_pending' => $checklist->where('status', 'pending')->count(),
+            'checklist_blocked' => $checklist->where('status', 'blocked')->count(),
+            'has_check_in_location' => $this->locationPayload($visit, 'check_in') !== null,
+            'has_check_out_location' => $this->locationPayload($visit, 'check_out') !== null,
+            'has_issue' => filled($visit->issue_note) || $visit->status === 'issue_reported',
+            'quality_status' => $visit->quality_status,
+            'quality_score' => $visit->quality_score,
+            'quality_notes' => $visit->quality_notes,
+            'quality_follow_up_required' => (bool) $visit->quality_follow_up_required,
+            'quality_reviewed_at' => $visit->quality_reviewed_at?->toDateTimeString(),
+            'quality_reviewed_by' => $qualityReviewer ? [
+                'id' => $qualityReviewer->id,
+                'name' => $qualityReviewer->name,
+            ] : null,
+            'customer_feedback' => $feedback ? [
+                'id' => $feedback->id,
+                'rating' => $feedback->rating,
+                'comment' => $feedback->comment,
+                'submitted_at' => $feedback->submitted_at?->toDateTimeString(),
+            ] : null,
+        ];
+    }
+
+    private function locationPayload(Visit $visit, string $prefix): ?array
+    {
+        $latitude = $visit->getAttribute("{$prefix}_latitude");
+        $longitude = $visit->getAttribute("{$prefix}_longitude");
+
+        if ($latitude === null || $longitude === null) {
+            return null;
+        }
+
+        return [
+            'latitude' => (string) $latitude,
+            'longitude' => (string) $longitude,
+            'accuracy_meters' => $visit->getAttribute("{$prefix}_accuracy_meters"),
+            'maps_url' => "https://www.google.com/maps?q={$latitude},{$longitude}",
+        ];
+    }
+
+    private function publicEvidenceUrl(string $path): string
+    {
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://') || str_starts_with($path, '/')) {
+            return $path;
+        }
+
+        return Storage::disk('public')->url($path);
     }
 
     private function serializeAssignment(Assignment $assignment): array
@@ -1097,6 +2001,8 @@ class OperationsController extends Controller
             'ends_at' => $this->time($assignment->ends_at),
             'share_percent' => $assignment->share_percent,
             'status' => $assignment->status,
+            'team_role' => $assignment->team_role ?? 'main',
+            'task_instructions' => $assignment->task_instructions ?? [],
             'contract' => $assignment->contract ? [
                 'id' => $assignment->contract->id,
                 'reference' => $assignment->contract->reference,

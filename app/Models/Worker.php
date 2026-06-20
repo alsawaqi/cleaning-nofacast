@@ -68,4 +68,9 @@ class Worker extends Model
     {
         return $this->hasMany(WorkerRevenueTarget::class);
     }
+
+    public function availabilityBlocks(): HasMany
+    {
+        return $this->hasMany(WorkerAvailabilityBlock::class);
+    }
 }

@@ -2,12 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesSarMoney;
+use App\Models\Assignment;
 use App\Models\AuditLog;
+use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\CustomerSite;
+use App\Models\Invoice;
+use App\Models\Payment;
+use App\Models\Visit;
+use App\Models\Worker;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -16,6 +25,8 @@ use Inertia\Response;
 
 class CustomerController extends Controller
 {
+    use HandlesSarMoney;
+
     public function index(): Response
     {
         $customers = Customer::query()
@@ -63,6 +74,58 @@ class CustomerController extends Controller
             'locationCatalog' => $this->locationCatalog(),
             'steps' => $this->formSteps(),
             'submitUrl' => "/app/customers/{$customer->id}",
+            'backUrl' => '/app/customers',
+        ]);
+    }
+
+    public function show(Customer $customer): Response
+    {
+        $customer->load([
+            'sites' => fn ($query) => $query->orderBy('city')->orderBy('name'),
+            'contracts' => fn ($query) => $query
+                ->with(['site', 'service', 'servicePackage'])
+                ->orderByRaw("CASE status WHEN 'active' THEN 0 WHEN 'draft' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END")
+                ->orderBy('reference'),
+            'invoices' => fn ($query) => $query
+                ->with([
+                    'payments' => fn ($paymentQuery) => $paymentQuery->orderByDesc('received_at'),
+                    'creditNotes',
+                    'contract.site',
+                ])
+                ->orderBy('due_date'),
+        ])->loadCount(['sites', 'contracts', 'invoices']);
+
+        $contracts = $customer->contracts;
+        $sites = $customer->sites;
+        $contractIds = $contracts->pluck('id')->values();
+        $siteIds = $sites->pluck('id')->values();
+        $assignments = Assignment::query()
+            ->with(['worker', 'site', 'contract'])
+            ->whereIn('contract_id', $contractIds)
+            ->orderBy('weekday')
+            ->orderBy('starts_at')
+            ->get();
+        $visits = Visit::query()
+            ->with(['worker', 'site', 'contract', 'service'])
+            ->where(function ($query) use ($contractIds, $siteIds): void {
+                $query->whereIn('contract_id', $contractIds)
+                    ->orWhereIn('customer_site_id', $siteIds);
+            })
+            ->orderByDesc('scheduled_for')
+            ->orderBy('starts_at')
+            ->get();
+        $invoices = $customer->invoices;
+
+        return Inertia::render('Customers/Show', [
+            'customer' => $this->serializeCustomer($customer),
+            'summary' => $this->customerSummary($customer, $contracts, $assignments, $visits),
+            'finance' => $this->financeSummary($invoices),
+            'sites' => $this->siteRows($sites, $contracts, $assignments, $visits, $invoices),
+            'contracts' => $this->contractRows($contracts, $assignments, $visits, $invoices),
+            'workers' => $this->workerRows($assignments, $visits),
+            'performanceTrend' => $this->performanceTrend($visits, $invoices),
+            'invoices' => $invoices->map(fn (Invoice $invoice): array => $this->serializeInvoice($invoice))->values(),
+            'catalog' => $this->catalog(),
             'backUrl' => '/app/customers',
         ]);
     }
@@ -394,6 +457,7 @@ class CustomerController extends Controller
             'vat_number' => $customer->vat_number,
             'status' => $customer->status,
             'edit_url' => "/app/customers/{$customer->id}/edit",
+            'detail_url' => "/app/customers/{$customer->id}",
             'sites_count' => $customer->sites_count ?? $customer->sites()->count(),
             'contracts_count' => $customer->contracts_count ?? $customer->contracts()->count(),
             'invoices_count' => $customer->invoices_count ?? $customer->invoices()->count(),
@@ -412,6 +476,282 @@ class CustomerController extends Controller
                 'contact_phone' => $site->contact_phone,
             ])->values(),
         ];
+    }
+
+    /**
+     * @param  Collection<int, Contract>  $contracts
+     * @param  Collection<int, Assignment>  $assignments
+     * @param  Collection<int, Visit>  $visits
+     * @return array<string, int>
+     */
+    private function customerSummary(Customer $customer, Collection $contracts, Collection $assignments, Collection $visits): array
+    {
+        return [
+            'sites_count' => $customer->sites_count ?? $customer->sites()->count(),
+            'contracts_count' => $contracts->count(),
+            'active_contracts_count' => $contracts->where('status', 'active')->count(),
+            'assigned_workers_count' => $this->distinctWorkerCount($assignments, $visits),
+            'visits_count' => $visits->count(),
+            'completed_visits_count' => $visits->where('status', 'completed')->count(),
+            'worked_minutes' => $this->workedMinutes($visits),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Invoice>  $invoices
+     * @return array<string, int|string>
+     */
+    private function financeSummary(Collection $invoices): array
+    {
+        $gross = (int) $invoices->sum('gross_total_halalas');
+        $paid = (int) $invoices->sum('paid_total_halalas');
+        $balance = (int) $invoices->sum('balance_halalas');
+        $overdue = (int) $invoices
+            ->filter(fn (Invoice $invoice): bool => $invoice->status !== 'paid' && $invoice->due_date?->isPast())
+            ->sum('balance_halalas');
+
+        return [
+            'gross_total_halalas' => $gross,
+            'gross_total_sar' => $this->halalasToSarString($gross),
+            'paid_total_halalas' => $paid,
+            'paid_total_sar' => $this->halalasToSarString($paid),
+            'balance_halalas' => $balance,
+            'balance_sar' => $this->halalasToSarString($balance),
+            'overdue_halalas' => $overdue,
+            'overdue_sar' => $this->halalasToSarString($overdue),
+            'invoices_count' => $invoices->count(),
+            'payments_count' => $invoices->sum(fn (Invoice $invoice): int => $invoice->payments->count()),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, CustomerSite>  $sites
+     * @param  Collection<int, Contract>  $contracts
+     * @param  Collection<int, Assignment>  $assignments
+     * @param  Collection<int, Visit>  $visits
+     * @param  Collection<int, Invoice>  $invoices
+     * @return list<array<string, mixed>>
+     */
+    private function siteRows(Collection $sites, Collection $contracts, Collection $assignments, Collection $visits, Collection $invoices): array
+    {
+        return $sites
+            ->map(function (CustomerSite $site) use ($contracts, $assignments, $visits, $invoices): array {
+                $siteContracts = $contracts->where('customer_site_id', $site->id);
+                $siteContractIds = $siteContracts->pluck('id');
+                $siteAssignments = $assignments->filter(fn (Assignment $assignment): bool => (int) $assignment->customer_site_id === (int) $site->id || $siteContractIds->contains($assignment->contract_id));
+                $siteVisits = $visits->filter(fn (Visit $visit): bool => (int) $visit->customer_site_id === (int) $site->id || $siteContractIds->contains($visit->contract_id));
+                $siteInvoices = $invoices->where('customer_site_id', $site->id);
+
+                return [
+                    'id' => $site->id,
+                    'name' => $site->name,
+                    'city' => $site->city,
+                    'district' => $site->district,
+                    'address' => $site->address,
+                    'contracts_count' => $siteContracts->count(),
+                    'workers_count' => $this->distinctWorkerCount($siteAssignments, $siteVisits),
+                    'visits_count' => $siteVisits->count(),
+                    'completed_visits_count' => $siteVisits->where('status', 'completed')->count(),
+                    'worked_minutes' => $this->workedMinutes($siteVisits),
+                    'gross_total_halalas' => (int) $siteInvoices->sum('gross_total_halalas'),
+                    'balance_halalas' => (int) $siteInvoices->sum('balance_halalas'),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, Contract>  $contracts
+     * @param  Collection<int, Assignment>  $assignments
+     * @param  Collection<int, Visit>  $visits
+     * @param  Collection<int, Invoice>  $invoices
+     * @return list<array<string, mixed>>
+     */
+    private function contractRows(Collection $contracts, Collection $assignments, Collection $visits, Collection $invoices): array
+    {
+        return $contracts
+            ->map(function (Contract $contract) use ($assignments, $visits, $invoices): array {
+                $contractAssignments = $assignments->where('contract_id', $contract->id);
+                $contractVisits = $visits->where('contract_id', $contract->id);
+                $contractInvoices = $invoices->where('contract_id', $contract->id);
+
+                return [
+                    'id' => $contract->id,
+                    'reference' => $contract->reference,
+                    'status' => $contract->status,
+                    'site' => $contract->site ? [
+                        'id' => $contract->site->id,
+                        'name' => $contract->site->name,
+                    ] : null,
+                    'service' => $contract->service ? [
+                        'id' => $contract->service->id,
+                        'title' => $contract->service->title,
+                    ] : null,
+                    'monthly_fee_halalas' => $contract->monthly_fee_halalas,
+                    'workers_count' => $this->distinctWorkerCount($contractAssignments, $contractVisits),
+                    'assignments_count' => $contractAssignments->count(),
+                    'visits_count' => $contractVisits->count(),
+                    'completed_visits_count' => $contractVisits->where('status', 'completed')->count(),
+                    'worked_minutes' => $this->workedMinutes($contractVisits),
+                    'gross_total_halalas' => (int) $contractInvoices->sum('gross_total_halalas'),
+                    'paid_total_halalas' => (int) $contractInvoices->sum('paid_total_halalas'),
+                    'balance_halalas' => (int) $contractInvoices->sum('balance_halalas'),
+                    'detail_url' => "/app/contracts/{$contract->id}",
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, Assignment>  $assignments
+     * @param  Collection<int, Visit>  $visits
+     * @return list<array<string, mixed>>
+     */
+    private function workerRows(Collection $assignments, Collection $visits): array
+    {
+        $workerIds = $assignments->pluck('worker_id')
+            ->merge($visits->pluck('worker_id'))
+            ->filter()
+            ->unique()
+            ->values();
+
+        return Worker::query()
+            ->whereIn('id', $workerIds)
+            ->orderBy('name')
+            ->get()
+            ->map(function (Worker $worker) use ($assignments, $visits): array {
+                $workerAssignments = $assignments->where('worker_id', $worker->id);
+                $workerVisits = $visits->where('worker_id', $worker->id);
+
+                return [
+                    'id' => $worker->id,
+                    'name' => $worker->name,
+                    'employee_code' => $worker->employee_code,
+                    'status' => $worker->status,
+                    'job_role' => $worker->job_role,
+                    'assignments_count' => $workerAssignments->count(),
+                    'contracts_count' => $workerAssignments->pluck('contract_id')->merge($workerVisits->pluck('contract_id'))->filter()->unique()->count(),
+                    'sites_count' => $workerAssignments->pluck('customer_site_id')->merge($workerVisits->pluck('customer_site_id'))->filter()->unique()->count(),
+                    'visits_count' => $workerVisits->count(),
+                    'completed_visits_count' => $workerVisits->where('status', 'completed')->count(),
+                    'worked_minutes' => $this->workedMinutes($workerVisits),
+                    'latest_visit' => $workerVisits->max(fn (Visit $visit): ?string => $visit->scheduled_for?->toDateString()),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, Visit>  $visits
+     * @param  Collection<int, Invoice>  $invoices
+     * @return list<array<string, mixed>>
+     */
+    private function performanceTrend(Collection $visits, Collection $invoices): array
+    {
+        $months = $visits
+            ->map(fn (Visit $visit): ?string => $visit->scheduled_for?->format('Y-m'))
+            ->merge($invoices->map(fn (Invoice $invoice): ?string => $invoice->issue_date?->format('Y-m')))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+
+        return $months
+            ->map(function (string $month) use ($visits, $invoices): array {
+                $monthVisits = $visits->filter(fn (Visit $visit): bool => $visit->scheduled_for?->format('Y-m') === $month);
+                $monthInvoices = $invoices->filter(fn (Invoice $invoice): bool => $invoice->issue_date?->format('Y-m') === $month);
+
+                return [
+                    'month' => $month,
+                    'label' => Carbon::createFromFormat('Y-m', $month)->format('M Y'),
+                    'visits_count' => $monthVisits->count(),
+                    'completed_visits_count' => $monthVisits->where('status', 'completed')->count(),
+                    'worked_minutes' => $this->workedMinutes($monthVisits),
+                    'billed_halalas' => (int) $monthInvoices->sum('gross_total_halalas'),
+                    'paid_halalas' => (int) $monthInvoices->sum('paid_total_halalas'),
+                    'balance_halalas' => (int) $monthInvoices->sum('balance_halalas'),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function serializeInvoice(Invoice $invoice): array
+    {
+        return [
+            'id' => $invoice->id,
+            'number' => $invoice->number,
+            'status' => $invoice->status,
+            'issue_date' => $invoice->issue_date?->toDateString(),
+            'due_date' => $invoice->due_date?->toDateString(),
+            'contract' => $invoice->contract?->reference,
+            'site' => $invoice->contract?->site?->name,
+            'gross_total_halalas' => $invoice->gross_total_halalas,
+            'gross_total_sar' => $this->halalasToSarString($invoice->gross_total_halalas),
+            'paid_total_halalas' => $invoice->paid_total_halalas,
+            'paid_total_sar' => $this->halalasToSarString($invoice->paid_total_halalas),
+            'balance_halalas' => $invoice->balance_halalas,
+            'balance_sar' => $this->halalasToSarString($invoice->balance_halalas),
+            'payments' => $invoice->payments->map(fn (Payment $payment): array => [
+                'id' => $payment->id,
+                'amount_halalas' => $payment->amount_halalas,
+                'amount_sar' => $this->halalasToSarString($payment->amount_halalas),
+                'method' => $payment->method,
+                'reference' => $payment->reference,
+                'received_at' => $payment->received_at?->toDateTimeString(),
+            ])->values(),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Assignment>  $assignments
+     * @param  Collection<int, Visit>  $visits
+     */
+    private function distinctWorkerCount(Collection $assignments, Collection $visits): int
+    {
+        return $assignments->pluck('worker_id')
+            ->merge($visits->pluck('worker_id'))
+            ->filter()
+            ->unique()
+            ->count();
+    }
+
+    /**
+     * @param  Collection<int, Visit>  $visits
+     */
+    private function workedMinutes(Collection $visits): int
+    {
+        return (int) $visits
+            ->filter(fn (Visit $visit): bool => $visit->status === 'completed')
+            ->sum(fn (Visit $visit): int => $this->visitWorkedMinutes($visit));
+    }
+
+    private function visitWorkedMinutes(Visit $visit): int
+    {
+        if ((int) $visit->actual_minutes > 0) {
+            return (int) $visit->actual_minutes;
+        }
+
+        if ($visit->checked_in_at && $visit->checked_out_at) {
+            return max(0, $visit->checked_in_at->diffInMinutes($visit->checked_out_at));
+        }
+
+        return $this->durationMinutes($visit->starts_at, $visit->ends_at);
+    }
+
+    private function durationMinutes(?string $startsAt, ?string $endsAt): int
+    {
+        if (! $startsAt || ! $endsAt) {
+            return 0;
+        }
+
+        $start = Carbon::createFromFormat('H:i', substr($startsAt, 0, 5));
+        $end = Carbon::createFromFormat('H:i', substr($endsAt, 0, 5));
+
+        return max(0, $start->diffInMinutes($end));
     }
 
     /**

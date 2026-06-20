@@ -2,11 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Models\Assignment;
 use App\Models\AuditLog;
+use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\CustomerSite;
+use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\User;
+use App\Models\Visit;
+use App\Models\Worker;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -41,7 +48,161 @@ class CustomerSiteManagementTest extends TestCase
                 ->where('createUrl', '/app/customers/create')
                 ->where('customers.0.name', 'Al Noor Pharmacy')
                 ->where('customers.0.edit_url', "/app/customers/{$customer->id}/edit")
+                ->where('customers.0.detail_url', "/app/customers/{$customer->id}")
                 ->where('customers.0.sites.0.name', 'Olaya Branch')
+            );
+    }
+
+    public function test_manager_can_view_customer_detail_with_contracts_workers_sites_finance_and_performance(): void
+    {
+        $this->withoutVite();
+        Carbon::setTestNow('2026-07-15 10:00:00');
+
+        $manager = User::factory()->create(['role' => 'operations']);
+        $customer = Customer::factory()->create([
+            'name' => 'Al Noor Facility Group',
+            'customer_type' => 'company',
+            'status' => 'active',
+        ]);
+        $site = CustomerSite::factory()->create([
+            'customer_id' => $customer->id,
+            'name' => 'Olaya Medical Center',
+            'city' => 'Riyadh',
+        ]);
+        $secondSite = CustomerSite::factory()->create([
+            'customer_id' => $customer->id,
+            'name' => 'Sulimaniyah Offices',
+            'city' => 'Riyadh',
+        ]);
+        $contract = Contract::factory()->create([
+            'customer_id' => $customer->id,
+            'customer_site_id' => $site->id,
+            'reference' => 'CON-CUST-001',
+            'status' => 'active',
+            'monthly_fee_halalas' => 100000,
+        ]);
+        $secondContract = Contract::factory()->create([
+            'customer_id' => $customer->id,
+            'customer_site_id' => $secondSite->id,
+            'reference' => 'CON-CUST-002',
+            'status' => 'paused',
+            'monthly_fee_halalas' => 50000,
+        ]);
+        $worker = Worker::factory()->create(['name' => 'Ahmed Hassan', 'employee_code' => 'WRK-301']);
+        $secondWorker = Worker::factory()->create(['name' => 'Saeed Ali', 'employee_code' => 'WRK-302']);
+
+        Assignment::factory()->for($contract)->create([
+            'customer_site_id' => $site->id,
+            'service_id' => $contract->service_id,
+            'worker_id' => $worker->id,
+            'weekday' => 1,
+            'starts_at' => '08:00',
+            'ends_at' => '11:00',
+            'status' => 'active',
+        ]);
+        Assignment::factory()->for($contract)->create([
+            'customer_site_id' => $site->id,
+            'service_id' => $contract->service_id,
+            'worker_id' => $secondWorker->id,
+            'weekday' => 2,
+            'starts_at' => '09:00',
+            'ends_at' => '11:30',
+            'status' => 'active',
+        ]);
+
+        Visit::create([
+            'contract_id' => $contract->id,
+            'worker_id' => $worker->id,
+            'customer_site_id' => $site->id,
+            'service_id' => $contract->service_id,
+            'scheduled_for' => '2026-06-10',
+            'starts_at' => '08:00',
+            'ends_at' => '11:00',
+            'status' => 'completed',
+            'actual_minutes' => 180,
+        ]);
+        Visit::create([
+            'contract_id' => $contract->id,
+            'worker_id' => $secondWorker->id,
+            'customer_site_id' => $site->id,
+            'service_id' => $contract->service_id,
+            'scheduled_for' => '2026-06-11',
+            'starts_at' => '09:00',
+            'ends_at' => '11:30',
+            'status' => 'completed',
+            'actual_minutes' => 150,
+        ]);
+        Visit::create([
+            'contract_id' => $secondContract->id,
+            'worker_id' => $secondWorker->id,
+            'customer_site_id' => $secondSite->id,
+            'service_id' => $secondContract->service_id,
+            'scheduled_for' => '2026-07-03',
+            'starts_at' => '10:00',
+            'ends_at' => '12:00',
+            'status' => 'scheduled',
+        ]);
+
+        $invoice = Invoice::factory()->create([
+            'contract_id' => $contract->id,
+            'customer_id' => $customer->id,
+            'customer_site_id' => $site->id,
+            'number' => 'INV-CUST-001',
+            'issue_date' => '2026-06-30',
+            'due_date' => '2026-07-01',
+            'gross_total_halalas' => 100000,
+            'paid_total_halalas' => 40000,
+        ]);
+        Invoice::factory()->create([
+            'contract_id' => $secondContract->id,
+            'customer_id' => $customer->id,
+            'customer_site_id' => $secondSite->id,
+            'number' => 'INV-CUST-002',
+            'issue_date' => '2026-07-05',
+            'due_date' => '2026-07-25',
+            'gross_total_halalas' => 50000,
+            'paid_total_halalas' => 50000,
+            'status' => 'paid',
+        ]);
+        Payment::create([
+            'invoice_id' => $invoice->id,
+            'amount_halalas' => 40000,
+            'method' => 'bank_transfer',
+            'reference' => 'PAY-CUST-001',
+            'received_at' => '2026-07-02 10:00:00',
+        ]);
+
+        $this->actingAs($manager)->get("/app/customers/{$customer->id}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Customers/Show')
+                ->where('customer.name', 'Al Noor Facility Group')
+                ->where('summary.contracts_count', 2)
+                ->where('summary.active_contracts_count', 1)
+                ->where('summary.assigned_workers_count', 2)
+                ->where('summary.completed_visits_count', 2)
+                ->where('summary.worked_minutes', 330)
+                ->where('finance.gross_total_halalas', 150000)
+                ->where('finance.paid_total_halalas', 90000)
+                ->where('finance.balance_halalas', 60000)
+                ->where('finance.overdue_halalas', 60000)
+                ->where('sites.0.name', 'Olaya Medical Center')
+                ->where('sites.0.contracts_count', 1)
+                ->where('sites.0.workers_count', 2)
+                ->where('sites.0.worked_minutes', 330)
+                ->where('contracts.0.reference', 'CON-CUST-001')
+                ->where('contracts.0.workers_count', 2)
+                ->where('contracts.0.completed_visits_count', 2)
+                ->where('contracts.0.balance_halalas', 60000)
+                ->where('workers.0.name', 'Ahmed Hassan')
+                ->where('workers.0.worked_minutes', 180)
+                ->where('workers.1.name', 'Saeed Ali')
+                ->where('workers.1.worked_minutes', 150)
+                ->where('performanceTrend.0.month', '2026-06')
+                ->where('performanceTrend.0.completed_visits_count', 2)
+                ->where('performanceTrend.0.worked_minutes', 330)
+                ->where('invoices.0.number', 'INV-CUST-001')
+                ->where('invoices.0.payments.0.reference', 'PAY-CUST-001')
             );
     }
 

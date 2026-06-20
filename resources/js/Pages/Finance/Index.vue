@@ -3,6 +3,7 @@ import { Head, router } from '@inertiajs/vue3';
 import {
     Banknote,
     CalendarDays,
+    CheckCheck,
     CheckCircle2,
     CreditCard,
     Download,
@@ -10,8 +11,9 @@ import {
     ReceiptText,
     Send,
     TrendingUp,
+    XCircle,
 } from '@lucide/vue';
-import { computed, reactive } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import MoneyText from '../../Components/MoneyText.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
 import { useI18n } from '../../lib/i18n';
@@ -24,6 +26,7 @@ type FinanceMetrics = {
     expected30: number;
     heldCheques: number;
     pendingCreditNotes: number;
+    pendingPaymentProofs: number;
 };
 
 type Aging = {
@@ -40,6 +43,31 @@ type ExpectedCollection = {
     due_date: string;
     balance_halalas: number;
     balance_sar: string;
+};
+
+type BillableExtra = {
+    visit_id: number;
+    scheduled_for?: string | null;
+    customer?: string | null;
+    site?: string | null;
+    contract?: string | null;
+    service?: string | null;
+    worker?: string | null;
+    minutes: number;
+    amount_halalas: number;
+    amount_sar: string;
+    invoice_url: string;
+};
+
+type InvoiceLineItem = {
+    id: number;
+    visit_id?: number | null;
+    line_type: string;
+    description: string;
+    quantity: number;
+    unit_label: string;
+    net_total_halalas: number;
+    gross_total_halalas: number;
 };
 
 type ChequeRow = {
@@ -67,35 +95,22 @@ type CreditNoteRow = {
     reason: string;
 };
 
-type ExpenseRow = {
+type PaymentProofRow = {
     id: number;
-    expense_date?: string | null;
-    expense_type: string;
-    category: string;
-    vendor?: string | null;
-    description?: string | null;
+    customer?: string | null;
+    invoice_id: number;
+    invoice_number?: string | null;
+    contract?: string | null;
     amount_halalas: number;
     amount_sar: string;
-    vat_halalas: number;
-    vat_sar: string;
-    payment_method: string;
-    payment_reference?: string | null;
+    method: string;
+    reference?: string | null;
+    paid_on?: string | null;
+    proof_url: string;
+    customer_note?: string | null;
     status: string;
-    receipt_path?: string | null;
-    customer?: string | null;
-    contract?: string | null;
-};
-
-type ExpenseSummary = {
-    direct_cost_halalas: number;
-    operating_expenses_halalas: number;
-    vat_halalas: number;
-    pending_halalas: number;
-};
-
-type ExpenseOption = {
-    key: string;
-    label: string;
+    approve_url: string;
+    reject_url: string;
 };
 
 type PaymentForm = {
@@ -116,32 +131,15 @@ type ChequeForm = {
     due_date: string;
 };
 
-type ExpenseForm = {
-    expense_date: string;
-    expense_type: string;
-    category: string;
-    vendor: string;
-    description: string;
-    amount_sar: string;
-    vat_sar: string;
-    payment_method: string;
-    payment_reference: string;
-    status: string;
-    receipt_path: string;
-};
-
 const props = defineProps<{
-    invoices: InvoiceRow[];
+    invoices: Array<InvoiceRow & { line_items?: InvoiceLineItem[] }>;
     metrics: FinanceMetrics;
     aging: Aging;
     expectedCollections: ExpectedCollection[];
+    billableExtras: BillableExtra[];
     cheques: ChequeRow[];
     creditNotes: CreditNoteRow[];
-    expenses: ExpenseRow[];
-    expenseSummary: ExpenseSummary;
-    expenseCategories: ExpenseOption[];
-    expenseTypes: ExpenseOption[];
-    expenseStatuses: ExpenseOption[];
+    paymentProofs: PaymentProofRow[];
 }>();
 
 const { t } = useI18n();
@@ -155,32 +153,28 @@ const chequeForm = reactive<ChequeForm>({
     amount_sar: props.invoices[0]?.balance_sar ?? '0.00',
     due_date: today(),
 });
-const expenseForm = reactive<ExpenseForm>({
-    expense_date: today(),
-    expense_type: 'operating_expense',
-    category: props.expenseCategories[0]?.key ?? 'miscellaneous',
-    vendor: '',
-    description: '',
-    amount_sar: '0.00',
-    vat_sar: '0.00',
-    payment_method: 'bank_transfer',
-    payment_reference: '',
-    status: 'paid',
-    receipt_path: '',
-});
 
-for (const invoice of props.invoices) {
-    payments[invoice.id] = {
-        amount_sar: invoice.balance_sar ?? '0.00',
-        method: 'bank_transfer',
-        reference: '',
-    };
-    invoiceStatuses[invoice.id] = invoice.status === 'overdue' ? 'sent' : invoice.status;
-    creditForms[invoice.id] = {
-        amount_sar: '0.00',
-        reason: '',
-    };
+function ensureInvoiceForms(): void {
+    for (const invoice of props.invoices) {
+        payments[invoice.id] ??= {
+            amount_sar: invoice.balance_sar ?? '0.00',
+            method: 'bank_transfer',
+            reference: '',
+        };
+        invoiceStatuses[invoice.id] ??= invoice.status === 'overdue' ? 'sent' : invoice.status;
+        creditForms[invoice.id] ??= {
+            amount_sar: '0.00',
+            reason: '',
+        };
+    }
+
+    if (! chequeForm.invoice_id && props.invoices[0]) {
+        chequeForm.invoice_id = String(props.invoices[0].id);
+        chequeForm.amount_sar = props.invoices[0].balance_sar ?? '0.00';
+    }
 }
+
+watch(() => props.invoices, ensureInvoiceForms, { immediate: true });
 
 const financeCards = computed(() => [
     { label: t('finance.openBalance', 'Open balance'), value: props.metrics.due, tone: 'text-gray-800', icon: Banknote },
@@ -189,6 +183,7 @@ const financeCards = computed(() => [
     { label: t('finance.expected30Days', 'Expected 30 days'), value: props.metrics.expected30, tone: 'text-brand-500', icon: TrendingUp },
     { label: t('finance.heldCheques', 'Held cheques'), value: props.metrics.heldCheques, tone: 'text-warning-600', icon: CreditCard },
     { label: t('finance.pendingCredits', 'Pending credits'), value: props.metrics.pendingCreditNotes, tone: 'text-brand-500', icon: FileText },
+    { label: t('finance.pendingPaymentProofs', 'Payment proofs'), value: props.metrics.pendingPaymentProofs, tone: 'text-success-600', icon: ReceiptText },
 ]);
 
 const agingCards = computed(() => [
@@ -196,13 +191,6 @@ const agingCards = computed(() => [
     { label: t('finance.oneToThirty', '1-30 days'), value: props.aging.oneToThirty, tone: 'bg-warning-500' },
     { label: t('finance.thirtyOneToSixty', '31-60 days'), value: props.aging.thirtyOneToSixty, tone: 'bg-error-500' },
     { label: t('finance.sixtyPlus', '61+ days'), value: props.aging.sixtyPlus, tone: 'bg-gray-700' },
-]);
-
-const expenseCards = computed(() => [
-    { label: t('finance.directJobCosts', 'Direct job costs'), value: props.expenseSummary.direct_cost_halalas, tone: 'text-warning-600' },
-    { label: t('finance.operatingExpenses', 'Operating expenses'), value: props.expenseSummary.operating_expenses_halalas, tone: 'text-error-600' },
-    { label: t('finance.expenseVat', 'Expense VAT'), value: props.expenseSummary.vat_halalas, tone: 'text-brand-500' },
-    { label: t('finance.pendingExpenses', 'Pending draft'), value: props.expenseSummary.pending_halalas, tone: 'text-gray-800' },
 ]);
 
 const maxAging = computed(() => Math.max(1, ...agingCards.value.map((item) => item.value)));
@@ -225,22 +213,36 @@ function approveCreditNote(creditNote: CreditNoteRow): void {
     router.patch(`/app/finance/credit-notes/${creditNote.id}/approve`, {}, { preserveScroll: true });
 }
 
+function approvePaymentProof(proof: PaymentProofRow): void {
+    const adminNote = window.prompt(t('finance.approvePaymentProofPrompt', 'Approval note (optional)'));
+
+    if (adminNote === null) {
+        return;
+    }
+
+    router.patch(proof.approve_url, {
+        admin_note: adminNote,
+    }, { preserveScroll: true });
+}
+
+function rejectPaymentProof(proof: PaymentProofRow): void {
+    const adminNote = window.prompt(t('finance.rejectPaymentProofPrompt', 'Reason for rejection (optional)'));
+
+    if (adminNote === null) {
+        return;
+    }
+
+    router.patch(proof.reject_url, {
+        admin_note: adminNote,
+    }, { preserveScroll: true });
+}
+
 function submitCheque(): void {
     router.post('/app/finance/cheques', chequeForm, { preserveScroll: true });
 }
 
-function submitExpense(): void {
-    router.post('/app/finance/expenses', expenseForm, {
-        preserveScroll: true,
-        onSuccess: () => {
-            expenseForm.vendor = '';
-            expenseForm.description = '';
-            expenseForm.amount_sar = '0.00';
-            expenseForm.vat_sar = '0.00';
-            expenseForm.payment_reference = '';
-            expenseForm.receipt_path = '';
-        },
-    });
+function createOvertimeInvoice(extra: BillableExtra): void {
+    router.post(extra.invoice_url, {}, { preserveScroll: true });
 }
 
 function updateChequeStatus(cheque: ChequeRow, status: string): void {
@@ -252,10 +254,6 @@ function updateChequeStatus(cheque: ChequeRow, status: string): void {
 
 function agingWidth(value: number): string {
     return `${Math.max(4, Math.round((value / maxAging.value) * 100))}%`;
-}
-
-function expenseOptionLabel(namespace: string, option: ExpenseOption): string {
-    return t(`${namespace}.${option.key}`, option.label);
 }
 
 function today(): string {
@@ -344,120 +342,115 @@ function today(): string {
             </article>
         </section>
 
-        <section class="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-            <article class="ta-card p-5">
-                <div class="flex items-center justify-between gap-3">
-                    <div>
-                        <h2 class="text-lg font-semibold text-gray-900">{{ t('finance.expenseEntry', 'Expense entry') }}</h2>
-                        <p class="mt-1 text-sm text-gray-500">{{ t('finance.expenseEntryBody', 'Track direct job costs and operating expenses for net-profit reporting.') }}</p>
-                    </div>
-                    <ReceiptText class="h-5 w-5 text-brand-500" />
+        <article class="ta-card overflow-hidden px-4 pb-4 pt-4 sm:px-6">
+            <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900">{{ t('finance.billableExtras', 'Billable extras') }}</h2>
+                    <p class="mt-1 text-sm text-gray-500">{{ t('finance.billableExtrasBody', 'Approved overtime waiting for an invoice line. Each visit can be billed only once.') }}</p>
                 </div>
+                <span class="rounded-full bg-warning-50 px-3 py-1 text-sm font-semibold text-warning-600">
+                    {{ t('finance.pendingExtrasCount', ':count pending', { count: billableExtras.length }) }}
+                </span>
+            </div>
 
-                <div class="mt-5 grid gap-3 sm:grid-cols-2">
-                    <div v-for="item in expenseCards" :key="item.label" class="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-                        <p class="text-xs font-bold uppercase text-gray-400">{{ item.label }}</p>
-                        <MoneyText class="mt-1 block text-lg font-bold" :class="item.tone" :value="item.value" />
-                    </div>
+            <div class="w-full overflow-x-auto">
+                <table class="ta-table min-w-[860px]">
+                    <thead>
+                        <tr>
+                            <th>{{ t('finance.customer', 'Customer') }}</th>
+                            <th>{{ t('finance.visit', 'Visit') }}</th>
+                            <th>{{ t('finance.worker', 'Worker') }}</th>
+                            <th>{{ t('finance.overtimeMinutes', 'Overtime') }}</th>
+                            <th>{{ t('finance.amount', 'Amount') }}</th>
+                            <th>{{ t('finance.action', 'Action') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="extra in billableExtras" :key="extra.visit_id">
+                            <td>
+                                <p class="font-semibold text-gray-900">{{ extra.customer }}</p>
+                                <p class="mt-1 text-xs text-gray-500">{{ extra.contract }}</p>
+                            </td>
+                            <td>
+                                <p class="font-medium text-gray-800">{{ extra.site }}</p>
+                                <p class="mt-1 text-xs text-gray-500">{{ extra.service }} / {{ extra.scheduled_for }}</p>
+                            </td>
+                            <td>{{ extra.worker ?? '-' }}</td>
+                            <td class="font-semibold text-warning-600">{{ t('finance.minutesShort', ':count min', { count: extra.minutes }) }}</td>
+                            <td class="font-semibold text-gray-900"><MoneyText :value="extra.amount_halalas" /></td>
+                            <td>
+                                <button type="button" class="ta-btn ta-btn-primary px-3 py-2 text-xs" @click="createOvertimeInvoice(extra)">
+                                    {{ t('finance.createOvertimeInvoice', 'Create invoice') }}
+                                </button>
+                            </td>
+                        </tr>
+                        <tr v-if="billableExtras.length === 0">
+                            <td colspan="6" class="py-8 text-center text-sm text-gray-500">
+                                {{ t('finance.noBillableExtras', 'No approved unbilled overtime right now.') }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        <article class="ta-card overflow-hidden px-4 pb-4 pt-4 sm:px-6">
+            <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900">{{ t('finance.paymentProofReview', 'Payment proof review') }}</h2>
+                    <p class="mt-1 text-sm text-gray-500">{{ t('finance.paymentProofReviewBody', 'Approve verified customer payment proofs, or reject them with a finance note.') }}</p>
                 </div>
+                <span class="rounded-full bg-success-50 px-3 py-1 text-sm font-semibold text-success-700">
+                    {{ t('finance.pendingProofsCount', ':count pending', { count: paymentProofs.length }) }}
+                </span>
+            </div>
 
-                <form class="mt-5 grid gap-3 md:grid-cols-2" @submit.prevent="submitExpense">
-                    <label class="text-sm font-medium text-gray-700">
-                        {{ t('finance.expenseDate', 'Expense date') }}
-                        <input v-model="expenseForm.expense_date" class="ta-input mt-1 h-11 w-full px-3 text-sm" type="date">
-                    </label>
-                    <label class="text-sm font-medium text-gray-700">
-                        {{ t('finance.expenseType', 'Expense type') }}
-                        <select v-model="expenseForm.expense_type" class="ta-input mt-1 h-11 w-full px-3 text-sm">
-                            <option v-for="option in expenseTypes" :key="option.key" :value="option.key">{{ expenseOptionLabel('finance.expenseTypes', option) }}</option>
-                        </select>
-                    </label>
-                    <label class="text-sm font-medium text-gray-700">
-                        {{ t('finance.category', 'Category') }}
-                        <select v-model="expenseForm.category" class="ta-input mt-1 h-11 w-full px-3 text-sm">
-                            <option v-for="option in expenseCategories" :key="option.key" :value="option.key">{{ expenseOptionLabel('finance.expenseCategories', option) }}</option>
-                        </select>
-                    </label>
-                    <label class="text-sm font-medium text-gray-700">
-                        {{ t('finance.vendor', 'Vendor') }}
-                        <input v-model="expenseForm.vendor" class="ta-input mt-1 h-11 w-full px-3 text-sm" type="text">
-                    </label>
-                    <label class="text-sm font-medium text-gray-700">
-                        {{ t('finance.amountSar', 'Amount (SAR)') }}
-                        <input v-model="expenseForm.amount_sar" class="ta-input mt-1 h-11 w-full px-3 text-sm" type="number" min="0.01" step="0.01" inputmode="decimal">
-                    </label>
-                    <label class="text-sm font-medium text-gray-700">
-                        {{ t('finance.vatSar', 'VAT (SAR)') }}
-                        <input v-model="expenseForm.vat_sar" class="ta-input mt-1 h-11 w-full px-3 text-sm" type="number" min="0" step="0.01" inputmode="decimal">
-                    </label>
-                    <label class="text-sm font-medium text-gray-700">
-                        {{ t('finance.paymentMethod', 'Payment method') }}
-                        <select v-model="expenseForm.payment_method" class="ta-input mt-1 h-11 w-full px-3 text-sm">
-                            <option value="bank_transfer">{{ t('finance.methods.bank_transfer', 'Bank transfer') }}</option>
-                            <option value="cash">{{ t('finance.methods.cash', 'Cash') }}</option>
-                            <option value="card">{{ t('finance.methods.card', 'Card') }}</option>
-                            <option value="cheque">{{ t('finance.methods.cheque', 'Cheque') }}</option>
-                        </select>
-                    </label>
-                    <label class="text-sm font-medium text-gray-700">
-                        {{ t('finance.status', 'Status') }}
-                        <select v-model="expenseForm.status" class="ta-input mt-1 h-11 w-full px-3 text-sm">
-                            <option v-for="option in expenseStatuses" :key="option.key" :value="option.key">{{ expenseOptionLabel('statuses', option) }}</option>
-                        </select>
-                    </label>
-                    <label class="text-sm font-medium text-gray-700 md:col-span-2">
-                        {{ t('finance.reference', 'Reference') }}
-                        <input v-model="expenseForm.payment_reference" class="ta-input mt-1 h-11 w-full px-3 text-sm" type="text">
-                    </label>
-                    <label class="text-sm font-medium text-gray-700 md:col-span-2">
-                        {{ t('finance.receiptPath', 'Receipt path') }}
-                        <input v-model="expenseForm.receipt_path" class="ta-input mt-1 h-11 w-full px-3 text-sm" type="text" placeholder="expense-receipts/file.pdf">
-                    </label>
-                    <label class="text-sm font-medium text-gray-700 md:col-span-2">
-                        {{ t('finance.description', 'Description') }}
-                        <textarea v-model="expenseForm.description" class="ta-input mt-1 min-h-24 w-full px-3 py-2 text-sm" />
-                    </label>
-                    <button class="ta-btn ta-btn-primary md:col-span-2" type="submit">
-                        {{ t('finance.recordExpense', 'Record expense') }}
-                    </button>
-                </form>
-            </article>
-
-            <article class="ta-card p-5">
-                <div class="flex items-center justify-between gap-3">
-                    <div>
-                        <h2 class="text-lg font-semibold text-gray-900">{{ t('finance.expenseLedger', 'Expense ledger') }}</h2>
-                        <p class="mt-1 text-sm text-gray-500">{{ t('finance.expenseLedgerBody', 'Recent costs classified for gross-profit and net-profit reports.') }}</p>
-                    </div>
-                    <FileText class="h-5 w-5 text-warning-600" />
-                </div>
-
-                <div class="mt-5 space-y-3">
-                    <div v-for="expense in expenses" :key="expense.id" class="rounded-2xl border border-gray-200 p-3">
-                        <div class="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-                            <div class="min-w-0">
-                                <p class="font-semibold text-gray-900">{{ expense.vendor || expenseOptionLabel('finance.expenseCategories', { key: expense.category, label: expense.category }) }}</p>
-                                <p class="mt-1 text-sm text-gray-500">
-                                    {{ expense.expense_date }} / {{ expenseOptionLabel('finance.expenseTypes', { key: expense.expense_type, label: expense.expense_type }) }}
-                                </p>
-                                <p v-if="expense.description" class="mt-1 break-words text-xs text-gray-500">{{ expense.description }}</p>
+            <div class="grid gap-4 xl:grid-cols-2">
+                <article v-for="proof in paymentProofs" :key="proof.id" class="rounded-2xl border border-gray-200 p-4">
+                    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="rounded-full bg-success-50 px-2.5 py-1 text-xs font-semibold text-success-700">{{ proof.method }}</span>
+                                <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">{{ proof.paid_on ?? '-' }}</span>
                             </div>
-                            <div class="shrink-0 text-start md:text-end">
-                                <MoneyText class="font-semibold text-gray-900" :value="expense.amount_halalas" />
-                                <div class="mt-2 flex flex-wrap gap-2 md:justify-end">
-                                    <StatusBadge :status="expense.status" />
-                                    <span class="rounded-full bg-gray-50 px-2 py-1 text-xs font-semibold text-gray-500">{{ expenseOptionLabel('finance.expenseCategories', { key: expense.category, label: expense.category }) }}</span>
-                                </div>
-                            </div>
+                            <h3 class="mt-3 text-base font-semibold text-gray-900">{{ proof.customer ?? '-' }}</h3>
+                            <p class="mt-1 text-sm text-gray-500">{{ proof.invoice_number ?? '-' }} / {{ proof.contract ?? '-' }}</p>
                         </div>
+                        <MoneyText class="text-lg font-bold text-gray-900" :value="proof.amount_halalas" />
                     </div>
 
-                    <p v-if="expenses.length === 0" class="rounded-2xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500">
-                        {{ t('finance.noExpenses', 'No expenses recorded yet.') }}
+                    <div class="mt-4 grid gap-2 sm:grid-cols-2">
+                        <span class="rounded-xl bg-gray-50 px-3 py-2 text-sm">
+                            <span class="block text-xs font-semibold uppercase text-gray-400">{{ t('finance.reference', 'Reference') }}</span>
+                            <span class="font-bold text-gray-900">{{ proof.reference ?? '-' }}</span>
+                        </span>
+                        <a :href="proof.proof_url" target="_blank" class="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-50 px-3 py-2 text-sm font-bold text-brand-600 hover:bg-brand-50">
+                            <Download class="h-4 w-4" />
+                            {{ t('finance.viewProof', 'View proof') }}
+                        </a>
+                    </div>
+
+                    <p v-if="proof.customer_note" class="mt-4 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm leading-6 text-gray-600">
+                        {{ proof.customer_note }}
                     </p>
-                </div>
-            </article>
-        </section>
+
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <button type="button" class="ta-btn ta-btn-primary px-3 py-2 text-xs" @click="approvePaymentProof(proof)">
+                            <CheckCheck class="h-4 w-4" />
+                            {{ t('finance.approvePaymentProof', 'Approve proof') }}
+                        </button>
+                        <button type="button" class="ta-btn ta-btn-secondary px-3 py-2 text-xs" @click="rejectPaymentProof(proof)">
+                            <XCircle class="h-4 w-4" />
+                            {{ t('finance.rejectPaymentProof', 'Reject') }}
+                        </button>
+                    </div>
+                </article>
+
+                <p v-if="paymentProofs.length === 0" class="rounded-2xl border border-dashed border-gray-200 px-4 py-10 text-center text-sm text-gray-500 xl:col-span-2">
+                    {{ t('finance.noPaymentProofs', 'No customer payment proofs are waiting for review.') }}
+                </p>
+            </div>
+        </article>
 
         <article class="ta-card overflow-hidden px-4 pb-3 pt-4 sm:px-6">
             <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -489,6 +482,12 @@ function today(): string {
                             <td class="whitespace-nowrap">
                                 <div class="font-semibold text-gray-800">{{ invoice.number }}</div>
                                 <div class="mt-1 text-xs text-gray-500">{{ invoice.contract }}</div>
+                                <div v-if="invoice.line_items?.length" class="mt-2 space-y-1">
+                                    <div v-for="line in invoice.line_items" :key="line.id" class="rounded-lg bg-gray-50 px-2 py-1 text-xs text-gray-600">
+                                        <span class="font-semibold text-gray-800">{{ line.description }}</span>
+                                        <span class="ms-1">/ <MoneyText :value="line.net_total_halalas" /></span>
+                                    </div>
+                                </div>
                                 <a :href="invoice.print_url" class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-500 hover:text-brand-700" target="_blank">
                                     <Download class="h-3.5 w-3.5" />
                                     {{ t('finance.htmlInvoice', 'HTML invoice') }}

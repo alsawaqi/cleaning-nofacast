@@ -66,25 +66,279 @@ class ExpenseController extends Controller
 
     public function storeCategory(Request $request): RedirectResponse
     {
+        $request->merge([
+            'code' => $this->categoryCode($request),
+        ]);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:160'],
-            'code' => ['nullable', 'string', 'max:80', 'unique:expense_categories,code'],
+            'code' => ['required', 'string', 'max:80', 'unique:expense_categories,code'],
             'expense_type' => ['required', Rule::in(array_column($this->expenseTypes(), 'key'))],
             'description' => ['nullable', 'string', 'max:1000'],
             'is_active' => ['required', 'boolean'],
         ]);
 
-        $category = ExpenseCategory::create([
-            ...$validated,
-            'code' => $validated['code'] ? Str::slug($validated['code'], '_') : Str::slug($validated['name'], '_'),
-        ]);
+        $category = ExpenseCategory::create($validated);
 
         $this->audit($request, 'expense_category.created', $category, [], $category->only(['name', 'code', 'expense_type', 'is_active']));
 
         return back()->with('success', __('Expense type created.'));
     }
 
+    public function updateCategory(Request $request, ExpenseCategory $expenseCategory): RedirectResponse
+    {
+        $request->merge([
+            'code' => $this->categoryCode($request),
+        ]);
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:160'],
+            'code' => ['required', 'string', 'max:80', Rule::unique('expense_categories', 'code')->ignore($expenseCategory->id)],
+            'expense_type' => ['required', Rule::in(array_column($this->expenseTypes(), 'key'))],
+            'description' => ['nullable', 'string', 'max:1000'],
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $old = $expenseCategory->only(['name', 'code', 'expense_type', 'description', 'is_active']);
+        $expenseCategory->update($validated);
+        $expenseCategory->expenses()->update([
+            'category' => $expenseCategory->code,
+            'expense_type' => $expenseCategory->expense_type,
+        ]);
+
+        $this->audit($request, 'expense_category.updated', $expenseCategory, $old, $expenseCategory->only(['name', 'code', 'expense_type', 'description', 'is_active']));
+
+        return back()->with('success', __('Expense type updated.'));
+    }
+
+    public function destroyCategory(Request $request, ExpenseCategory $expenseCategory): RedirectResponse
+    {
+        if ($expenseCategory->expenses()->exists()) {
+            return back()->withErrors([
+                'expense_category' => __('Expense type is already used by expense records. Delete or reassign those records first.'),
+            ]);
+        }
+
+        $old = $expenseCategory->only(['name', 'code', 'expense_type', 'description', 'is_active']);
+        $this->audit($request, 'expense_category.deleted', $expenseCategory, $old, []);
+        $expenseCategory->delete();
+
+        return back()->with('success', __('Expense type deleted.'));
+    }
+
     public function storeExpense(Request $request): RedirectResponse
+    {
+        $expense = Expense::create($this->validatedExpensePayload($request));
+
+        $this->audit($request, 'expense.created', $expense, [], $expense->only([
+            'expense_category_id',
+            'expense_date',
+            'expense_type',
+            'category',
+            'vendor',
+            'amount_halalas',
+            'vat_halalas',
+            'payment_method',
+            'status',
+        ]));
+
+        return back()->with('success', __('Expense recorded.'));
+    }
+
+    public function updateExpense(Request $request, Expense $expense): RedirectResponse
+    {
+        $old = $expense->only([
+            'expense_category_id',
+            'expense_date',
+            'expense_type',
+            'category',
+            'vendor',
+            'amount_halalas',
+            'vat_halalas',
+            'payment_method',
+            'payment_reference',
+            'status',
+            'receipt_path',
+        ]);
+
+        $expense->update($this->validatedExpensePayload($request));
+
+        $this->audit($request, 'expense.updated', $expense, $old, $expense->only([
+            'expense_category_id',
+            'expense_date',
+            'expense_type',
+            'category',
+            'vendor',
+            'amount_halalas',
+            'vat_halalas',
+            'payment_method',
+            'payment_reference',
+            'status',
+            'receipt_path',
+        ]));
+
+        return back()->with('success', __('Expense updated.'));
+    }
+
+    public function destroyExpense(Request $request, Expense $expense): RedirectResponse
+    {
+        $old = $expense->only([
+            'expense_category_id',
+            'expense_date',
+            'expense_type',
+            'category',
+            'vendor',
+            'amount_halalas',
+            'vat_halalas',
+            'payment_method',
+            'payment_reference',
+            'status',
+            'receipt_path',
+        ]);
+
+        $this->audit($request, 'expense.deleted', $expense, $old, []);
+        $expense->delete();
+
+        return back()->with('success', __('Expense deleted.'));
+    }
+
+    public function storeCostItem(Request $request): RedirectResponse
+    {
+        $item = CostItem::create($this->validatedCostItemPayload($request));
+
+        $this->audit($request, 'cost_item.created', $item, [], $item->only(['name', 'item_type', 'purchase_cost_halalas', 'default_cost_per_use_halalas']));
+
+        return back()->with('success', __('Cost item created.'));
+    }
+
+    public function updateCostItem(Request $request, CostItem $costItem): RedirectResponse
+    {
+        $old = $costItem->only([
+            'name',
+            'item_type',
+            'unit',
+            'purchase_cost_halalas',
+            'estimated_life_months',
+            'estimated_monthly_uses',
+            'default_cost_per_use_halalas',
+            'notes',
+            'is_active',
+        ]);
+
+        $costItem->update($this->validatedCostItemPayload($request));
+
+        $this->audit($request, 'cost_item.updated', $costItem, $old, $costItem->only([
+            'name',
+            'item_type',
+            'unit',
+            'purchase_cost_halalas',
+            'estimated_life_months',
+            'estimated_monthly_uses',
+            'default_cost_per_use_halalas',
+            'notes',
+            'is_active',
+        ]));
+
+        return back()->with('success', __('Cost item updated.'));
+    }
+
+    public function destroyCostItem(Request $request, CostItem $costItem): RedirectResponse
+    {
+        if ($costItem->serviceCostItems()->exists()) {
+            return back()->withErrors([
+                'cost_item' => __('Cost item is already linked to services. Remove those links first.'),
+            ]);
+        }
+
+        $old = $costItem->only([
+            'name',
+            'item_type',
+            'unit',
+            'purchase_cost_halalas',
+            'estimated_life_months',
+            'estimated_monthly_uses',
+            'default_cost_per_use_halalas',
+            'notes',
+            'is_active',
+        ]);
+
+        $this->audit($request, 'cost_item.deleted', $costItem, $old, []);
+        $costItem->delete();
+
+        return back()->with('success', __('Cost item deleted.'));
+    }
+
+    public function storeServiceCostItem(Request $request): RedirectResponse
+    {
+        $validated = $this->validatedServiceCostItemPayload($request);
+        $serviceCostItem = ServiceCostItem::updateOrCreate([
+            'service_id' => $validated['service_id'],
+            'cost_item_id' => $validated['cost_item_id'],
+        ], $validated);
+
+        $this->audit($request, 'service_cost_item.synced', $serviceCostItem, [], $serviceCostItem->only([
+            'service_id',
+            'cost_item_id',
+            'quantity',
+            'cost_per_use_halalas',
+            'line_total_halalas',
+            'charge_customer',
+        ]));
+
+        return back()->with('success', __('Service cost item linked.'));
+    }
+
+    public function updateServiceCostItem(Request $request, ServiceCostItem $serviceCostItem): RedirectResponse
+    {
+        $old = $serviceCostItem->only([
+            'service_id',
+            'cost_item_id',
+            'quantity',
+            'cost_per_use_halalas',
+            'line_total_halalas',
+            'charge_customer',
+            'notes',
+        ]);
+
+        $serviceCostItem->update($this->validatedServiceCostItemPayload($request, $serviceCostItem));
+
+        $this->audit($request, 'service_cost_item.updated', $serviceCostItem, $old, $serviceCostItem->only([
+            'service_id',
+            'cost_item_id',
+            'quantity',
+            'cost_per_use_halalas',
+            'line_total_halalas',
+            'charge_customer',
+            'notes',
+        ]));
+
+        return back()->with('success', __('Service cost item updated.'));
+    }
+
+    public function destroyServiceCostItem(Request $request, ServiceCostItem $serviceCostItem): RedirectResponse
+    {
+        $old = $serviceCostItem->only([
+            'service_id',
+            'cost_item_id',
+            'quantity',
+            'cost_per_use_halalas',
+            'line_total_halalas',
+            'charge_customer',
+            'notes',
+        ]);
+
+        $this->audit($request, 'service_cost_item.deleted', $serviceCostItem, $old, []);
+        $serviceCostItem->delete();
+
+        return back()->with('success', __('Service cost item deleted.'));
+    }
+
+    private function categoryCode(Request $request): string
+    {
+        return Str::slug((string) ($request->input('code') ?: $request->input('name')), '_');
+    }
+
+    private function validatedExpensePayload(Request $request): array
     {
         $this->mergeSarFromHalalas($request, 'amount_sar', 'amount_halalas');
         $this->mergeSarFromHalalas($request, 'vat_sar', 'vat_halalas');
@@ -103,7 +357,8 @@ class ExpenseController extends Controller
         ]);
 
         $category = ExpenseCategory::query()->findOrFail($validated['expense_category_id']);
-        $expense = Expense::create([
+
+        return [
             ...collect($validated)
                 ->except(['amount_sar', 'vat_sar'])
                 ->all(),
@@ -111,24 +366,10 @@ class ExpenseController extends Controller
             'category' => $category->code,
             'amount_halalas' => $this->sarToHalalas($validated['amount_sar']),
             'vat_halalas' => $this->sarToHalalas($validated['vat_sar']),
-        ]);
-
-        $this->audit($request, 'expense.created', $expense, [], $expense->only([
-            'expense_category_id',
-            'expense_date',
-            'expense_type',
-            'category',
-            'vendor',
-            'amount_halalas',
-            'vat_halalas',
-            'payment_method',
-            'status',
-        ]));
-
-        return back()->with('success', __('Expense recorded.'));
+        ];
     }
 
-    public function storeCostItem(Request $request): RedirectResponse
+    private function validatedCostItemPayload(Request $request): array
     {
         $this->mergeSarFromHalalas($request, 'purchase_cost_sar', 'purchase_cost_halalas');
         $this->mergeSarFromHalalas($request, 'default_cost_per_use_sar', 'default_cost_per_use_halalas');
@@ -155,54 +396,45 @@ class ExpenseController extends Controller
             ? $this->sarToHalalas($validated['default_cost_per_use_sar'])
             : (int) round($purchaseCost / max(1, ((int) $validated['estimated_life_months']) * ((int) $validated['estimated_monthly_uses'])));
 
-        $item = CostItem::create([
+        return [
             ...collect($validated)
                 ->except(['purchase_cost_sar', 'default_cost_per_use_sar'])
                 ->all(),
             'purchase_cost_halalas' => $purchaseCost,
             'default_cost_per_use_halalas' => $defaultCost,
-        ]);
-
-        $this->audit($request, 'cost_item.created', $item, [], $item->only(['name', 'item_type', 'purchase_cost_halalas', 'default_cost_per_use_halalas']));
-
-        return back()->with('success', __('Cost item created.'));
+        ];
     }
 
-    public function storeServiceCostItem(Request $request): RedirectResponse
+    private function validatedServiceCostItemPayload(Request $request, ?ServiceCostItem $serviceCostItem = null): array
     {
         $this->mergeSarFromHalalas($request, 'cost_per_use_sar', 'cost_per_use_halalas');
 
+        $uniqueCostItemPerService = Rule::unique('service_cost_items', 'cost_item_id')
+            ->where(fn ($query) => $query->where('service_id', $request->input('service_id')));
+
+        if ($serviceCostItem) {
+            $uniqueCostItemPerService->ignore($serviceCostItem->id);
+        }
+
         $validated = $request->validate([
             'service_id' => ['required', 'integer', 'exists:services,id'],
-            'cost_item_id' => ['required', 'integer', 'exists:cost_items,id'],
+            'cost_item_id' => ['required', 'integer', 'exists:cost_items,id', $uniqueCostItemPerService],
             'quantity' => ['required', 'numeric', 'min:0.01', 'max:999999.99', 'regex:/^\d+(\.\d{1,2})?$/'],
             'cost_per_use_sar' => $this->sarMoneyRules(),
             'charge_customer' => ['required', 'boolean'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $lineTotal = (int) round($this->sarToHalalas($validated['cost_per_use_sar']) * (float) $validated['quantity']);
-        $serviceCostItem = ServiceCostItem::updateOrCreate([
-            'service_id' => $validated['service_id'],
-            'cost_item_id' => $validated['cost_item_id'],
-        ], [
-            'quantity' => $validated['quantity'],
-            'cost_per_use_halalas' => $this->sarToHalalas($validated['cost_per_use_sar']),
-            'line_total_halalas' => $lineTotal,
-            'charge_customer' => $validated['charge_customer'],
+        $costPerUse = $this->sarToHalalas($validated['cost_per_use_sar']);
+
+        return [
+            ...collect($validated)
+                ->except(['cost_per_use_sar'])
+                ->all(),
+            'cost_per_use_halalas' => $costPerUse,
+            'line_total_halalas' => (int) round($costPerUse * (float) $validated['quantity']),
             'notes' => $validated['notes'] ?? null,
-        ]);
-
-        $this->audit($request, 'service_cost_item.synced', $serviceCostItem, [], $serviceCostItem->only([
-            'service_id',
-            'cost_item_id',
-            'quantity',
-            'cost_per_use_halalas',
-            'line_total_halalas',
-            'charge_customer',
-        ]));
-
-        return back()->with('success', __('Service cost item linked.'));
+        ];
     }
 
     private function categoryRows(): array

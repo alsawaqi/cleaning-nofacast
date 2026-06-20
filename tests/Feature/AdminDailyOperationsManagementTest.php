@@ -146,6 +146,167 @@ class AdminDailyOperationsManagementTest extends TestCase
         $this->assertSame('Checklist and site photos reviewed.', $visit->supervisor_note);
     }
 
+    public function test_supervisor_can_approve_completed_visit_after_reviewing_evidence(): void
+    {
+        $this->withoutVite();
+
+        $supervisor = User::factory()->create(['role' => 'supervisor']);
+        $service = Service::factory()->create();
+        $contract = Contract::factory()->create(['service_id' => $service->id]);
+        $visit = $this->visit($contract, $service, null, [
+            'scheduled_for' => '2026-06-16',
+            'status' => 'completed',
+            'checked_in_at' => '2026-06-16 08:02:00',
+            'check_in_latitude' => '24.7136000',
+            'check_in_longitude' => '46.6753000',
+            'check_in_accuracy_meters' => 18,
+            'checked_out_at' => '2026-06-16 10:10:00',
+            'check_out_latitude' => '24.7141000',
+            'check_out_longitude' => '46.6760000',
+            'check_out_accuracy_meters' => 24,
+            'photos' => ['worker-photos/visits/lobby-after.jpg'],
+        ]);
+        $visit->checklistItems()->create([
+            'label' => 'Reception sanitised',
+            'status' => 'done',
+            'notes' => 'Completed and inspected.',
+            'photo_path' => 'worker-photos/checklist/reception.jpg',
+            'completed_at' => '2026-06-16 09:00:00',
+        ]);
+
+        $this->actingAs($supervisor)->patch("/app/operations/visits/{$visit->id}/completion-review", [
+            'decision' => 'approved',
+            'supervisor_note' => 'GPS, checklist, and photos reviewed.',
+        ])->assertRedirect();
+
+        $visit->refresh();
+
+        $this->assertSame('approved', $visit->completion_review_status);
+        $this->assertSame($supervisor->id, $visit->completion_reviewed_by);
+        $this->assertNotNull($visit->completion_reviewed_at);
+        $this->assertSame('GPS, checklist, and photos reviewed.', $visit->completion_review_note);
+        $this->assertSame($supervisor->id, $visit->supervisor_acknowledged_by);
+        $this->assertNotNull($visit->supervisor_acknowledged_at);
+
+        $this->actingAs($supervisor)->get('/app/operations?date=2026-06-16&tab=visits')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('metrics.awaitingAcknowledgement', 0)
+                ->where('dailyControl.evidence.approved_reviews', 1)
+                ->where('visits.0.evidence_review.status', 'approved')
+                ->where('visits.0.evidence_review.photo_count', 2)
+                ->where('visits.0.evidence_review.checklist_done', 1)
+                ->where('visits.0.check_in_location.latitude', '24.7136000')
+                ->where('visits.0.check_out_location.longitude', '46.6760000')
+            );
+        $this->assertDatabaseHas('audit_logs', [
+            'user_id' => $supervisor->id,
+            'action' => 'visit.completion_reviewed',
+            'auditable_type' => Visit::class,
+            'auditable_id' => $visit->id,
+        ]);
+    }
+
+    public function test_supervisor_can_request_visit_correction_without_approving_completion(): void
+    {
+        $this->withoutVite();
+
+        $supervisor = User::factory()->create(['role' => 'supervisor']);
+        $service = Service::factory()->create();
+        $contract = Contract::factory()->create(['service_id' => $service->id]);
+        $visit = $this->visit($contract, $service, null, [
+            'scheduled_for' => '2026-06-16',
+            'status' => 'completed',
+            'checked_in_at' => '2026-06-16 08:02:00',
+            'checked_out_at' => '2026-06-16 10:10:00',
+            'photos' => [],
+        ]);
+        $visit->checklistItems()->create([
+            'label' => 'Kitchen floor cleaned',
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($supervisor)->patch("/app/operations/visits/{$visit->id}/completion-review", [
+            'decision' => 'needs_correction',
+            'supervisor_note' => 'Missing checklist evidence and final photos.',
+        ])->assertRedirect();
+
+        $visit->refresh();
+
+        $this->assertSame('needs_correction', $visit->completion_review_status);
+        $this->assertSame($supervisor->id, $visit->completion_reviewed_by);
+        $this->assertSame('Missing checklist evidence and final photos.', $visit->completion_review_note);
+        $this->assertNull($visit->supervisor_acknowledged_by);
+        $this->assertNull($visit->supervisor_acknowledged_at);
+
+        $this->actingAs($supervisor)->get('/app/operations?date=2026-06-16&tab=visits')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('metrics.awaitingAcknowledgement', 0)
+                ->where('dailyControl.evidence.corrections_requested', 1)
+                ->where('visits.0.evidence_review.status', 'needs_correction')
+                ->where('visits.0.evidence_review.needs_review', false)
+                ->where('visits.0.evidence_review.checklist_pending', 1)
+            );
+    }
+
+    public function test_supervisor_can_record_quality_review_and_customer_follow_up(): void
+    {
+        $this->withoutVite();
+
+        $supervisor = User::factory()->create(['role' => 'supervisor']);
+        $service = Service::factory()->create(['title' => 'Villa Deep Cleaning']);
+        $contract = Contract::factory()->create([
+            'service_id' => $service->id,
+            'reference' => 'CON-QUALITY-01',
+        ]);
+        $visit = $this->visit($contract, $service, null, [
+            'scheduled_for' => '2026-06-16',
+            'status' => 'completed',
+            'checked_in_at' => '2026-06-16 08:00:00',
+            'checked_out_at' => '2026-06-16 11:00:00',
+            'photos' => ['worker-photos/visits/villa-after.jpg'],
+        ]);
+
+        $this->actingAs($supervisor)->patch("/app/operations/visits/{$visit->id}/completion-review", [
+            'decision' => 'approved',
+            'quality_status' => 'customer_follow_up',
+            'quality_score' => 72,
+            'supervisor_note' => 'Evidence accepted, but customer asked for supervisor call about bathroom finishing.',
+            'create_follow_up' => true,
+        ])->assertRedirect();
+
+        $visit->refresh();
+
+        $this->assertSame('approved', $visit->completion_review_status);
+        $this->assertSame('customer_follow_up', $visit->quality_status);
+        $this->assertSame(72, $visit->quality_score);
+        $this->assertSame($supervisor->id, $visit->quality_reviewed_by);
+        $this->assertNotNull($visit->quality_reviewed_at);
+        $this->assertSame('Evidence accepted, but customer asked for supervisor call about bathroom finishing.', $visit->quality_notes);
+
+        $this->assertDatabaseHas('service_requests', [
+            'type' => 'quality_follow_up',
+            'status' => 'pending',
+            'priority' => 'high',
+            'customer_id' => $contract->customer_id,
+            'contract_id' => $contract->id,
+            'visit_id' => $visit->id,
+            'subject' => 'Quality follow-up required',
+        ]);
+
+        $this->actingAs($supervisor)->get('/app/operations?date=2026-06-16&tab=visits')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('dailyControl.evidence.quality_reviews', 1)
+                ->where('dailyControl.evidence.quality_follow_ups', 1)
+                ->where('visits.0.evidence_review.quality_status', 'customer_follow_up')
+                ->where('visits.0.evidence_review.quality_score', 72)
+                ->where('serviceRequests.items.0.type', 'quality_follow_up')
+                ->where('serviceRequests.items.0.visit.id', $visit->id)
+            );
+    }
+
     public function test_manager_can_update_checklist_item_with_notes_and_photo(): void
     {
         $this->withoutVite();

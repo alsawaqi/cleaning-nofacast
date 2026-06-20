@@ -14,7 +14,7 @@ class LocalEInvoiceIssuer implements EInvoiceIssuer
         $invoice->forceFill([
             'status' => $invoice->status === 'draft' ? 'issued' : $invoice->status,
             'zatca_qr' => $this->qrCode->generate(
-                sellerName: config('app.name', 'Nofacast Clean'),
+                sellerName: config('app.name', 'Nofa Clean'),
                 vatNumber: config('services.zatca.vat_number', '300000000000003'),
                 issuedAt: $invoice->created_at?->toAtomString() ?? now()->toAtomString(),
                 totalWithVat: number_format($invoice->gross_total_halalas / 100, 2, '.', ''),

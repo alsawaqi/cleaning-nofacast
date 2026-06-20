@@ -59,6 +59,11 @@ class Invoice extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function paymentProofs(): HasMany
+    {
+        return $this->hasMany(PaymentProof::class);
+    }
+
     public function cheques(): HasMany
     {
         return $this->hasMany(Cheque::class);
@@ -67,6 +72,11 @@ class Invoice extends Model
     public function creditNotes(): HasMany
     {
         return $this->hasMany(CreditNote::class);
+    }
+
+    public function lineItems(): HasMany
+    {
+        return $this->hasMany(InvoiceLineItem::class);
     }
 
     public function getCreditTotalHalalasAttribute(): int

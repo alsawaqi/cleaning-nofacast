@@ -35,7 +35,7 @@ class FinanceRulesTest extends TestCase
         $qr = new ZatcaQrCode;
 
         $payload = $qr->generate(
-            sellerName: 'Nofacast Clean',
+            sellerName: 'Nofa Clean',
             vatNumber: '300000000000003',
             issuedAt: '2026-06-14T12:00:00+03:00',
             totalWithVat: '115.00',
@@ -45,12 +45,12 @@ class FinanceRulesTest extends TestCase
         $decoded = base64_decode($payload, strict: true);
 
         $this->assertIsString($decoded);
-        $this->assertStringContainsString('Nofacast Clean', $decoded);
+        $this->assertStringContainsString('Nofa Clean', $decoded);
         $this->assertStringContainsString('300000000000003', $decoded);
         $this->assertStringContainsString('2026-06-14T12:00:00+03:00', $decoded);
         $this->assertStringContainsString('115.00', $decoded);
         $this->assertStringContainsString('15.00', $decoded);
         $this->assertSame(1, ord($decoded[0]));
-        $this->assertSame(strlen('Nofacast Clean'), ord($decoded[1]));
+        $this->assertSame(strlen('Nofa Clean'), ord($decoded[1]));
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -39,7 +40,7 @@ class AuthController extends Controller
 
         $request->session()->regenerate();
 
-        return redirect()->intended('/app/dashboard');
+        return redirect()->intended($this->redirectPathFor($request->user()));
     }
 
     public function destroy(Request $request): RedirectResponse
@@ -49,5 +50,26 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
 
         return redirect('/login');
+    }
+
+    private function redirectPathFor(?User $user): string
+    {
+        if (! $user) {
+            return '/';
+        }
+
+        if ($user->hasPermission('access_back_office')) {
+            return '/app/dashboard';
+        }
+
+        if ($user->hasPermission('access_worker_portal')) {
+            return '/app/worker/today';
+        }
+
+        if ($user->hasPermission('access_customer_portal')) {
+            return '/app/customer';
+        }
+
+        return '/';
     }
 }

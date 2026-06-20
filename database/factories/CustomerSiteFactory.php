@@ -24,6 +24,7 @@ class CustomerSiteFactory extends Factory
             'longitude' => null,
             'google_place_id' => null,
             'formatted_address' => null,
+            'is_default' => false,
             'contact_name' => $this->faker->name(),
             'contact_phone' => '+9665'.$this->faker->numerify('########'),
         ];

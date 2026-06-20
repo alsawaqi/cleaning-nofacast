@@ -161,6 +161,7 @@ class ServiceController extends Controller
             'included_materials_text' => $request->input('included_materials_text', ''),
             'extra_hour_rate_sar' => $request->input('extra_hour_rate_sar', '0.00'),
             'overtime_policy' => $request->input('overtime_policy', 'none'),
+            'sla_kpi_template' => $request->input('sla_kpi_template', []),
         ]);
 
         if (is_array($request->input('packages'))) {
@@ -226,6 +227,13 @@ class ServiceController extends Controller
             'checklist_template' => ['array', 'max:30'],
             'checklist_template.*.label' => ['required', 'string', 'max:160'],
             'checklist_template.*.is_required' => ['nullable', 'boolean'],
+            'sla_kpi_template' => ['array', 'max:20'],
+            'sla_kpi_template.*.code' => ['nullable', 'string', 'max:80'],
+            'sla_kpi_template.*.label' => ['required', 'string', 'max:160'],
+            'sla_kpi_template.*.target' => ['required', 'numeric', 'min:0', 'max:100000'],
+            'sla_kpi_template.*.unit' => ['nullable', 'string', 'max:40'],
+            'sla_kpi_template.*.weight' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'sla_kpi_template.*.direction' => ['nullable', Rule::in(['at_least', 'at_most'])],
             'is_active' => ['required', 'boolean'],
             'packages' => ['array', 'max:12'],
             'packages.*.name' => ['required', 'string', 'max:160'],
@@ -244,6 +252,13 @@ class ServiceController extends Controller
             'packages.*.checklist_template' => ['array', 'max:30'],
             'packages.*.checklist_template.*.label' => ['required', 'string', 'max:160'],
             'packages.*.checklist_template.*.is_required' => ['nullable', 'boolean'],
+            'packages.*.sla_kpi_template' => ['array', 'max:20'],
+            'packages.*.sla_kpi_template.*.code' => ['nullable', 'string', 'max:80'],
+            'packages.*.sla_kpi_template.*.label' => ['required', 'string', 'max:160'],
+            'packages.*.sla_kpi_template.*.target' => ['required', 'numeric', 'min:0', 'max:100000'],
+            'packages.*.sla_kpi_template.*.unit' => ['nullable', 'string', 'max:40'],
+            'packages.*.sla_kpi_template.*.weight' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'packages.*.sla_kpi_template.*.direction' => ['nullable', Rule::in(['at_least', 'at_most'])],
             'packages.*.is_active' => ['required', 'boolean'],
             'pricing_rules' => ['array', 'max:20'],
             'pricing_rules.*.name' => ['required', 'string', 'max:160'],
@@ -263,12 +278,14 @@ class ServiceController extends Controller
         $validated['default_material_cost_halalas'] = $this->sarToHalalas($validated['default_material_cost_sar']);
         $validated['extra_hour_rate_halalas'] = $this->sarToHalalas($validated['extra_hour_rate_sar']);
         $validated['included_materials'] = $this->splitList($validated['included_materials_text'] ?? '');
+        $validated['sla_kpi_template'] = $this->normalizeSlaKpiTemplate($validated['sla_kpi_template'] ?? []);
         unset($validated['base_price_sar']);
         unset($validated['default_material_cost_sar'], $validated['extra_hour_rate_sar'], $validated['included_materials_text']);
 
         foreach ($validated['packages'] ?? [] as $index => $package) {
             $validated['packages'][$index]['price_halalas'] = $this->sarToHalalas($package['price_sar']);
             $validated['packages'][$index]['material_cost_halalas'] = $this->sarToHalalas($package['material_cost_sar']);
+            $validated['packages'][$index]['sla_kpi_template'] = $this->normalizeSlaKpiTemplate($package['sla_kpi_template'] ?? []);
             unset($validated['packages'][$index]['price_sar'], $validated['packages'][$index]['material_cost_sar']);
         }
 
@@ -306,6 +323,7 @@ class ServiceController extends Controller
             'allowed_frequencies',
             'required_certificates',
             'checklist_template',
+            'sla_kpi_template',
             'is_active',
         ];
     }
@@ -318,6 +336,7 @@ class ServiceController extends Controller
             ->map(fn (array $package): array => [
                 ...$package,
                 'checklist_template' => $package['checklist_template'] ?? [],
+                'sla_kpi_template' => $package['sla_kpi_template'] ?? [],
             ])
             ->each(fn (array $package): ServicePackage => $service->packages()->create($package));
     }
@@ -457,6 +476,45 @@ class ServiceController extends Controller
     }
 
     /**
+     * @param  array<int, array<string, mixed>>  $template
+     * @return array<int, array{code: string, label: string, target: int|float, unit: string, weight: int, direction: string}>
+     */
+    private function normalizeSlaKpiTemplate(array $template): array
+    {
+        return collect($template)
+            ->map(function (array $item): ?array {
+                $label = trim((string) ($item['label'] ?? ''));
+
+                if ($label === '') {
+                    return null;
+                }
+
+                $code = trim((string) ($item['code'] ?? ''));
+
+                return [
+                    'code' => $code !== '' ? str($code)->snake()->toString() : str($label)->snake()->limit(80, '')->toString(),
+                    'label' => $label,
+                    'target' => is_float($item['target'] ?? null) ? (float) $item['target'] : (int) ($item['target'] ?? 0),
+                    'unit' => trim((string) ($item['unit'] ?? 'percent')) ?: 'percent',
+                    'weight' => (int) ($item['weight'] ?? 0),
+                    'direction' => in_array($item['direction'] ?? null, ['at_least', 'at_most'], true)
+                        ? (string) $item['direction']
+                        : $this->defaultKpiDirection($code),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private function defaultKpiDirection(string $code): string
+    {
+        return str($code)->contains(['issue', 'missed', 'complaint', 'late'])
+            ? 'at_most'
+            : 'at_least';
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function serializeService(Service $service): array
@@ -486,6 +544,7 @@ class ServiceController extends Controller
                 'vat_rate' => $package->vat_rate,
                 'prices_include_vat' => $package->prices_include_vat,
                 'checklist_template' => $package->checklist_template ?? [],
+                'sla_kpi_template' => $package->sla_kpi_template ?? [],
                 'is_active' => $package->is_active,
             ])->values(),
             'pricing_rules' => $service->pricingRules->map(fn (ServicePricingRule $rule): array => [

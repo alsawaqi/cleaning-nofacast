@@ -18,7 +18,7 @@
     <body>
         <div class="header">
             <div>
-                <div class="brand">Nofacast Clean</div>
+                <div class="brand">Nofa Clean</div>
                 <div class="muted">Saudi VAT invoice / فاتورة ضريبية</div>
             </div>
             <div>
@@ -35,20 +35,33 @@
             <thead>
                 <tr>
                     <th>Description</th>
+                    <th>Qty</th>
+                    <th>Unit</th>
                     <th>Amount</th>
                 </tr>
             </thead>
             <tbody>
+                @forelse ($invoice->lineItems as $line)
+                    <tr>
+                        <td>{{ $line->description }}</td>
+                        <td>{{ $line->quantity }} {{ $line->unit_label }}</td>
+                        <td>SAR {{ number_format($line->unit_price_halalas / 100, 2) }}</td>
+                        <td>SAR {{ number_format($line->net_total_halalas / 100, 2) }}</td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td>Cleaning and facility services</td>
+                        <td>1 item</td>
+                        <td>SAR {{ number_format($invoice->net_total_halalas / 100, 2) }}</td>
+                        <td>SAR {{ number_format($invoice->net_total_halalas / 100, 2) }}</td>
+                    </tr>
+                @endforelse
                 <tr>
-                    <td>Cleaning and facility services</td>
-                    <td>SAR {{ number_format($invoice->net_total_halalas / 100, 2) }}</td>
-                </tr>
-                <tr>
-                    <td>VAT {{ $invoice->vat_rate }}%</td>
+                    <td colspan="3">VAT {{ $invoice->vat_rate }}%</td>
                     <td>SAR {{ number_format($invoice->vat_total_halalas / 100, 2) }}</td>
                 </tr>
                 <tr class="total">
-                    <td>Total</td>
+                    <td colspan="3">Total</td>
                     <td>SAR {{ number_format($invoice->gross_total_halalas / 100, 2) }}</td>
                 </tr>
             </tbody>

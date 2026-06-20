@@ -24,6 +24,7 @@ class CustomerSite extends Model
         'longitude',
         'google_place_id',
         'formatted_address',
+        'is_default',
         'contact_name',
         'contact_phone',
     ];
@@ -31,6 +32,7 @@ class CustomerSite extends Model
     protected $casts = [
         'latitude' => 'decimal:7',
         'longitude' => 'decimal:7',
+        'is_default' => 'boolean',
     ];
 
     public function customer(): BelongsTo

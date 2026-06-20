@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
-import { Banknote, ClipboardList, ReceiptText, Wrench } from '@lucide/vue';
-import { computed } from 'vue';
+import { Banknote, ClipboardList, Pencil, ReceiptText, Trash2, Wrench, X } from '@lucide/vue';
+import { computed, ref } from 'vue';
 import MoneyText from '../../Components/MoneyText.vue';
 import { useI18n } from '../../lib/i18n';
 import type { ExpenseCategory, ExpenseRow, ExpenseSummary, Option } from './types';
@@ -14,6 +14,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+const editingExpenseId = ref<number | null>(null);
 
 const paymentMethods: Option[] = [
     { key: 'bank_transfer', label: 'Bank transfer' },
@@ -25,7 +26,7 @@ const paymentMethods: Option[] = [
 
 const expenseForm = useForm({
     expense_date: today(),
-    expense_category_id: props.categories[0] ? String(props.categories[0].id) : '',
+    expense_category_id: defaultExpenseCategoryId(),
     vendor: '',
     description: '',
     amount_sar: '0.00',
@@ -35,6 +36,7 @@ const expenseForm = useForm({
     status: 'paid',
     receipt_path: '',
 });
+const deleteForm = useForm({});
 
 const summaryCards = computed(() => [
     { label: t('expensesAdmin.directJobCosts', 'Direct job costs'), value: props.summary.direct_cost_halalas, icon: Wrench, tone: 'bg-warning-50 text-warning-600' },
@@ -69,14 +71,68 @@ function statusTone(status: string): string {
 }
 
 function submitExpense(): void {
+    if (editingExpenseId.value) {
+        expenseForm.patch(`/app/expenses/${editingExpenseId.value}`, {
+            preserveScroll: true,
+            onSuccess: () => resetExpenseForm(),
+        });
+
+        return;
+    }
+
     expenseForm.post('/app/expenses', {
         preserveScroll: true,
+        onSuccess: () => resetExpenseForm(),
+    });
+}
+
+function editExpense(expense: ExpenseRow): void {
+    editingExpenseId.value = expense.id;
+    expenseForm.clearErrors();
+    expenseForm.expense_date = expense.expense_date ?? today();
+    expenseForm.expense_category_id = expense.expense_category_id ? String(expense.expense_category_id) : '';
+    expenseForm.vendor = expense.vendor ?? '';
+    expenseForm.description = expense.description ?? '';
+    expenseForm.amount_sar = expense.amount_sar;
+    expenseForm.vat_sar = expense.vat_sar;
+    expenseForm.payment_method = expense.payment_method;
+    expenseForm.payment_reference = expense.payment_reference ?? '';
+    expenseForm.status = expense.status;
+    expenseForm.receipt_path = expense.receipt_path ?? '';
+}
+
+function destroyExpense(expense: ExpenseRow): void {
+    if (! confirm(t('expensesAdmin.deleteExpenseConfirm', 'Delete this expense record?'))) {
+        return;
+    }
+
+    deleteForm.delete(`/app/expenses/${expense.id}`, {
+        preserveScroll: true,
         onSuccess: () => {
-            expenseForm.reset('vendor', 'description', 'amount_sar', 'vat_sar', 'payment_reference', 'receipt_path');
-            expenseForm.amount_sar = '0.00';
-            expenseForm.vat_sar = '0.00';
+            if (editingExpenseId.value === expense.id) {
+                resetExpenseForm();
+            }
         },
     });
+}
+
+function resetExpenseForm(): void {
+    editingExpenseId.value = null;
+    expenseForm.clearErrors();
+    expenseForm.expense_date = today();
+    expenseForm.expense_category_id = defaultExpenseCategoryId();
+    expenseForm.vendor = '';
+    expenseForm.description = '';
+    expenseForm.amount_sar = '0.00';
+    expenseForm.vat_sar = '0.00';
+    expenseForm.payment_method = 'bank_transfer';
+    expenseForm.payment_reference = '';
+    expenseForm.status = 'paid';
+    expenseForm.receipt_path = '';
+}
+
+function defaultExpenseCategoryId(): string {
+    return props.categories[0] ? String(props.categories[0].id) : '';
 }
 
 function today(): string {
@@ -118,7 +174,22 @@ function today(): string {
         </div>
 
         <article class="ta-card p-5">
-            <form class="grid gap-4 md:grid-cols-2" @submit.prevent="submitExpense">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900">
+                        {{ editingExpenseId ? t('expensesAdmin.updateExpense', 'Update expense') : t('expensesAdmin.recordExpense', 'Record expense') }}
+                    </h2>
+                    <p v-if="editingExpenseId" class="mt-1 text-sm text-brand-600">
+                        {{ t('expensesAdmin.editingExistingRecord', 'Editing an existing record') }}
+                    </p>
+                </div>
+                <button v-if="editingExpenseId" type="button" class="ta-btn ta-btn-secondary" @click="resetExpenseForm">
+                    <X class="h-4 w-4" />
+                    {{ t('expensesAdmin.cancel', 'Cancel') }}
+                </button>
+            </div>
+
+            <form class="mt-5 grid gap-4 md:grid-cols-2" @submit.prevent="submitExpense">
                 <label class="block">
                     <span class="text-sm font-medium text-gray-700">{{ t('expensesAdmin.expenseDate', 'Expense date') }}</span>
                     <input v-model="expenseForm.expense_date" type="date" class="ta-input mt-1 h-11 w-full px-3 text-sm">
@@ -194,7 +265,7 @@ function today(): string {
 
                 <div class="md:col-span-2">
                     <button type="submit" class="ta-btn ta-btn-primary w-full sm:w-auto" :disabled="! expenseForm.expense_category_id || expenseForm.processing">
-                        {{ t('expensesAdmin.recordExpense', 'Record expense') }}
+                        {{ editingExpenseId ? t('expensesAdmin.updateExpense', 'Update expense') : t('expensesAdmin.recordExpense', 'Record expense') }}
                     </button>
                 </div>
             </form>
@@ -219,6 +290,7 @@ function today(): string {
                             <th class="px-3 py-3 text-start">{{ t('expensesAdmin.amountSar', 'Amount (SAR)') }}</th>
                             <th class="px-3 py-3 text-start">{{ t('expensesAdmin.paymentMethod', 'Payment method') }}</th>
                             <th class="px-3 py-3 text-start">{{ t('expensesAdmin.status', 'Status') }}</th>
+                            <th class="px-3 py-3 text-end">{{ t('expensesAdmin.actions', 'Actions') }}</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
@@ -235,6 +307,18 @@ function today(): string {
                                 <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium" :class="statusTone(expense.status)">
                                     {{ statusLabel(expense.status) }}
                                 </span>
+                            </td>
+                            <td class="px-3 py-3">
+                                <div class="flex justify-end gap-2">
+                                    <button type="button" class="ta-btn ta-btn-secondary px-3 py-2" @click="editExpense(expense)">
+                                        <Pencil class="h-4 w-4" />
+                                        <span class="sr-only">{{ t('expensesAdmin.edit', 'Edit') }}</span>
+                                    </button>
+                                    <button type="button" class="ta-btn ta-btn-secondary px-3 py-2 text-error-600" :disabled="deleteForm.processing" @click="destroyExpense(expense)">
+                                        <Trash2 class="h-4 w-4" />
+                                        <span class="sr-only">{{ t('expensesAdmin.delete', 'Delete') }}</span>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     </tbody>

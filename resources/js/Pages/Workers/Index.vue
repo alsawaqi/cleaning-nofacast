@@ -2,7 +2,9 @@
 import { Head, Link } from '@inertiajs/vue3';
 import {
     BadgeCheck,
+    BarChart3,
     BriefcaseBusiness,
+    Eye,
     FileText,
     GraduationCap,
     HardHat,
@@ -42,6 +44,7 @@ const props = defineProps<{
         expiringDocuments: number;
     };
     createUrl: string;
+    statusUrl: string;
 }>();
 
 const { t } = useI18n();
@@ -83,10 +86,16 @@ function expiryTone(status: string): string {
                 </p>
             </div>
 
-            <Link :href="createUrl" class="ta-btn ta-btn-primary">
-                <Plus class="h-4 w-4" />
-                {{ t('workersAdmin.newWorker', 'New worker') }}
-            </Link>
+            <div class="flex flex-wrap gap-2">
+                <Link :href="statusUrl" class="ta-btn ta-btn-secondary">
+                    <BarChart3 class="h-4 w-4" />
+                    {{ t('workersAdmin.statusReport', 'Status report') }}
+                </Link>
+                <Link :href="createUrl" class="ta-btn ta-btn-primary">
+                    <Plus class="h-4 w-4" />
+                    {{ t('workersAdmin.newWorker', 'New worker') }}
+                </Link>
+            </div>
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -117,9 +126,14 @@ function expiryTone(status: string): string {
                         <p class="mt-2 text-sm text-gray-500">{{ worker.phone || t('workersAdmin.noPhone', 'No phone') }}</p>
                     </div>
 
-                    <Link :href="worker.edit_url ?? `/app/workers/${worker.id}/edit`" class="ta-btn ta-btn-secondary h-10 w-10 p-0" :aria-label="t('workersAdmin.edit', 'Edit')">
-                        <Pencil class="h-4 w-4" />
-                    </Link>
+                    <div class="flex gap-2">
+                        <Link :href="worker.detail_url ?? `/app/workers/${worker.id}`" class="ta-btn ta-btn-secondary h-10 w-10 p-0" :aria-label="t('workersAdmin.viewDetails', 'View details')">
+                            <Eye class="h-4 w-4" />
+                        </Link>
+                        <Link :href="worker.edit_url ?? `/app/workers/${worker.id}/edit`" class="ta-btn ta-btn-secondary h-10 w-10 p-0" :aria-label="t('workersAdmin.edit', 'Edit')">
+                            <Pencil class="h-4 w-4" />
+                        </Link>
+                    </div>
                 </div>
 
                 <div class="mt-5 grid gap-3 sm:grid-cols-4">

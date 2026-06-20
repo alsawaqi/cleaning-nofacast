@@ -11,24 +11,27 @@ type PageModule = {
     };
 };
 
-const pages = import.meta.glob<PageModule>('./Pages/**/*.vue', { eager: true });
-const publicPages = new Set(['Auth/Login', 'Public/Lead']);
+const pages = import.meta.glob<PageModule>('./Pages/**/*.vue');
+const publicPages = new Set(['Auth/Login', 'Auth/Register', 'Public/Lead']);
 
 createInertiaApp({
-    title: (title) => (title ? `${title} - Nofacast Clean` : 'Nofacast Clean'),
-    resolve: (name) => {
-        const page = pages[`./Pages/${name}.vue`];
+    title: (title) => (title ? `${title} - Nofa Clean` : 'Nofa Clean'),
+    resolve: async (name) => {
+        const loadPage = pages[`./Pages/${name}.vue`];
 
-        if (!page) {
+        if (!loadPage) {
             throw new Error(`Page not found: ${name}`);
         }
 
+        const page = await loadPage();
+
+        const component = page.default;
+
         if (!publicPages.has(name)) {
-            const component = page.default as Record<string, unknown>;
             component.layout = component.layout || AppLayout;
         }
 
-        return page;
+        return component;
     },
     setup({ el, App, props, plugin }) {
         applyDocumentLocaleFromPageProps(

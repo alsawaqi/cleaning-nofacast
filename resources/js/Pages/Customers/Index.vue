@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import {
     Building2,
     ClipboardList,
+    Eye,
     Languages,
     MapPin,
     Pencil,
@@ -100,9 +101,14 @@ function catalogLabel(group: keyof Catalog, key: string): string {
                         <p class="mt-2 text-sm text-gray-500">{{ customer.email || t('customersAdmin.noEmail', 'No email') }}</p>
                     </div>
 
-                    <Link :href="customer.edit_url ?? `/app/customers/${customer.id}/edit`" class="ta-btn ta-btn-secondary h-10 w-10 p-0" :aria-label="t('customersAdmin.edit', 'Edit')">
-                        <Pencil class="h-4 w-4" />
-                    </Link>
+                    <div class="flex items-center gap-2">
+                        <Link :href="customer.detail_url ?? `/app/customers/${customer.id}`" class="ta-btn ta-btn-secondary h-10 w-10 p-0" :aria-label="t('customersAdmin.details', 'Details')">
+                            <Eye class="h-4 w-4" />
+                        </Link>
+                        <Link :href="customer.edit_url ?? `/app/customers/${customer.id}/edit`" class="ta-btn ta-btn-secondary h-10 w-10 p-0" :aria-label="t('customersAdmin.edit', 'Edit')">
+                            <Pencil class="h-4 w-4" />
+                        </Link>
+                    </div>
                 </div>
 
                 <div class="mt-5 grid gap-3 sm:grid-cols-3">

@@ -64,6 +64,11 @@ class User extends Authenticatable
         return $this->hasOne(Worker::class);
     }
 
+    public function customer(): HasOne
+    {
+        return $this->hasOne(Customer::class);
+    }
+
     /**
      * @return array<int, string>
      */

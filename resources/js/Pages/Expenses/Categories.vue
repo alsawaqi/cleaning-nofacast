@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
-import { Banknote, ClipboardList, Plus, Wrench } from '@lucide/vue';
-import { computed } from 'vue';
+import { Banknote, ClipboardList, Pencil, Plus, Trash2, Wrench, X } from '@lucide/vue';
+import { computed, ref } from 'vue';
 import MoneyText from '../../Components/MoneyText.vue';
 import { useI18n } from '../../lib/i18n';
 import type { ExpenseCategory, ExpenseSummary, Option } from './types';
@@ -13,6 +13,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+const editingCategoryId = ref<number | null>(null);
 
 const categoryForm = useForm({
     name: '',
@@ -21,6 +22,7 @@ const categoryForm = useForm({
     description: '',
     is_active: true,
 });
+const deleteForm = useForm({});
 
 const summaryCards = computed(() => [
     { label: t('expensesAdmin.directJobCosts', 'Direct job costs'), value: props.summary.direct_cost_halalas, icon: Wrench, tone: 'bg-warning-50 text-warning-600' },
@@ -37,10 +39,54 @@ function categoryTypeLabel(type: string): string {
 }
 
 function submitCategory(): void {
+    if (editingCategoryId.value) {
+        categoryForm.patch(`/app/expenses/categories/${editingCategoryId.value}`, {
+            preserveScroll: true,
+            onSuccess: () => resetCategoryForm(),
+        });
+
+        return;
+    }
+
     categoryForm.post('/app/expenses/categories', {
         preserveScroll: true,
-        onSuccess: () => categoryForm.reset('name', 'code', 'description'),
+        onSuccess: () => resetCategoryForm(),
     });
+}
+
+function editCategory(category: ExpenseCategory): void {
+    editingCategoryId.value = category.id;
+    categoryForm.clearErrors();
+    categoryForm.name = category.name;
+    categoryForm.code = category.code;
+    categoryForm.expense_type = category.expense_type;
+    categoryForm.description = category.description ?? '';
+    categoryForm.is_active = category.is_active;
+}
+
+function destroyCategory(category: ExpenseCategory): void {
+    if (category.expenses_count > 0 || ! confirm(t('expensesAdmin.deleteExpenseTypeConfirm', 'Delete this expense type?'))) {
+        return;
+    }
+
+    deleteForm.delete(`/app/expenses/categories/${category.id}`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            if (editingCategoryId.value === category.id) {
+                resetCategoryForm();
+            }
+        },
+    });
+}
+
+function resetCategoryForm(): void {
+    editingCategoryId.value = null;
+    categoryForm.clearErrors();
+    categoryForm.name = '';
+    categoryForm.code = '';
+    categoryForm.expense_type = 'operating_expense';
+    categoryForm.description = '';
+    categoryForm.is_active = true;
 }
 </script>
 
@@ -76,10 +122,16 @@ function submitCategory(): void {
             <article class="ta-card p-5">
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <h2 class="text-lg font-semibold text-gray-900">{{ t('expensesAdmin.saveExpenseType', 'Save type') }}</h2>
+                        <h2 class="text-lg font-semibold text-gray-900">
+                            {{ editingCategoryId ? t('expensesAdmin.updateExpenseType', 'Update type') : t('expensesAdmin.saveExpenseType', 'Save type') }}
+                        </h2>
                         <p class="mt-1 text-sm text-gray-500">{{ t('expensesAdmin.expenseTypesBody', 'Create the categories used for salaries, rent, equipment, utilities, and direct job costs.') }}</p>
                     </div>
-                    <Plus class="h-5 w-5 text-brand-500" />
+                    <button v-if="editingCategoryId" type="button" class="ta-btn ta-btn-secondary px-3 py-2" @click="resetCategoryForm">
+                        <X class="h-4 w-4" />
+                        {{ t('expensesAdmin.cancel', 'Cancel') }}
+                    </button>
+                    <Plus v-else class="h-5 w-5 text-brand-500" />
                 </div>
 
                 <form class="mt-5 space-y-4" @submit.prevent="submitCategory">
@@ -118,7 +170,7 @@ function submitCategory(): void {
                             {{ t('expensesAdmin.active', 'Active') }}
                         </label>
                         <button type="submit" class="ta-btn ta-btn-primary" :disabled="categoryForm.processing">
-                            {{ t('expensesAdmin.saveExpenseType', 'Save type') }}
+                            {{ editingCategoryId ? t('expensesAdmin.updateExpenseType', 'Update type') : t('expensesAdmin.saveExpenseType', 'Save type') }}
                         </button>
                     </div>
                 </form>
@@ -133,9 +185,25 @@ function submitCategory(): void {
                                 <p class="font-semibold text-gray-900">{{ category.name }}</p>
                                 <p class="mt-0.5 text-xs text-gray-500">{{ category.code }} / {{ categoryTypeLabel(category.expense_type) }}</p>
                             </div>
-                            <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">
-                                {{ t('expensesAdmin.recordsCount', ':count records', { count: category.expenses_count }) }}
-                            </span>
+                            <div class="flex items-center gap-2">
+                                <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">
+                                    {{ t('expensesAdmin.recordsCount', ':count records', { count: category.expenses_count }) }}
+                                </span>
+                                <button type="button" class="ta-btn ta-btn-secondary px-3 py-2" @click="editCategory(category)">
+                                    <Pencil class="h-4 w-4" />
+                                    <span class="sr-only">{{ t('expensesAdmin.edit', 'Edit') }}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="ta-btn ta-btn-secondary px-3 py-2 text-error-600 disabled:text-gray-400"
+                                    :disabled="category.expenses_count > 0 || deleteForm.processing"
+                                    :title="category.expenses_count > 0 ? t('expensesAdmin.inUseCannotDelete', 'Used records cannot be deleted') : t('expensesAdmin.delete', 'Delete')"
+                                    @click="destroyCategory(category)"
+                                >
+                                    <Trash2 class="h-4 w-4" />
+                                    <span class="sr-only">{{ t('expensesAdmin.delete', 'Delete') }}</span>
+                                </button>
+                            </div>
                         </div>
                         <p v-if="category.description" class="mt-3 text-sm leading-6 text-gray-500">{{ category.description }}</p>
                     </div>

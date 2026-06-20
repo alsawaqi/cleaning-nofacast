@@ -28,6 +28,7 @@ class AssignmentFactory extends Factory
             'ends_at' => '12:00',
             'share_percent' => 100,
             'status' => 'active',
+            'team_role' => 'main',
         ];
     }
 

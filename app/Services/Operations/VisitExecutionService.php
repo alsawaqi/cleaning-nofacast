@@ -8,11 +8,17 @@ use Illuminate\Support\Carbon;
 
 class VisitExecutionService
 {
-    public function start(Visit $visit, ?Carbon $checkedInAt = null): Visit
+    /**
+     * @param  array<string, mixed>  $evidence
+     */
+    public function start(Visit $visit, ?Carbon $checkedInAt = null, array $evidence = []): Visit
     {
         $visit->forceFill([
             'status' => 'in_progress',
             'checked_in_at' => $checkedInAt ?? now(),
+            'check_in_latitude' => $evidence['check_in_latitude'] ?? null,
+            'check_in_longitude' => $evidence['check_in_longitude'] ?? null,
+            'check_in_accuracy_meters' => $evidence['check_in_accuracy_meters'] ?? null,
             'planned_minutes' => $this->durationMinutes($visit->starts_at, $visit->ends_at),
             'overtime_status' => 'not_required',
         ])->save();
@@ -53,6 +59,13 @@ class VisitExecutionService
             'status' => 'completed',
             'checked_in_at' => $checkedInAt,
             'checked_out_at' => $checkedOutAt,
+            'check_out_latitude' => $data['check_out_latitude'] ?? null,
+            'check_out_longitude' => $data['check_out_longitude'] ?? null,
+            'check_out_accuracy_meters' => $data['check_out_accuracy_meters'] ?? null,
+            'completion_review_status' => 'pending_review',
+            'completion_reviewed_at' => null,
+            'completion_reviewed_by' => null,
+            'completion_review_note' => null,
             'planned_minutes' => $plannedMinutes,
             'actual_minutes' => $actualMinutes,
             'variance_minutes' => $varianceMinutes,

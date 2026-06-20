@@ -2,13 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Models\Assignment;
 use App\Models\AuditLog;
 use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\CustomerSite;
+use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Service;
 use App\Models\ServicePackage;
 use App\Models\User;
+use App\Models\Worker;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia;
@@ -125,6 +129,381 @@ class ContractPaymentPlanManagementTest extends TestCase
                 ->has('serviceOptions.0')
                 ->has('customers.0')
             );
+    }
+
+    public function test_manager_can_view_contract_detail_with_assignments_and_payment_history(): void
+    {
+        $this->withoutVite();
+
+        $manager = User::factory()->create(['role' => 'operations']);
+        [$customer, $site, $service, $package] = $this->contractDependencies();
+        $worker = Worker::factory()->create(['name' => 'Ahmed Hassan', 'employee_code' => 'WRK-501']);
+        $contract = Contract::factory()->create([
+            'customer_id' => $customer->id,
+            'customer_site_id' => $site->id,
+            'service_id' => $service->id,
+            'service_package_id' => $package->id,
+            'reference' => 'CON-DETAIL-001',
+            'monthly_fee_halalas' => 100000,
+            'starts_on' => '2026-07-01',
+            'payment_plan' => [
+                ['label' => 'Advance', 'day' => 1, 'percent' => 40],
+                ['label' => 'Final', 'day' => 20, 'percent' => 60],
+            ],
+            'service_scope' => [
+                ['area' => 'Lobby', 'tasks' => 'Daily floor cleaning'],
+            ],
+            'terms_and_conditions' => 'Customer provides secure site access.',
+        ]);
+
+        Assignment::factory()->for($contract)->create([
+            'customer_site_id' => $site->id,
+            'service_id' => $service->id,
+            'worker_id' => $worker->id,
+            'weekday' => 1,
+            'starts_at' => '09:00',
+            'ends_at' => '12:00',
+            'share_percent' => 100,
+            'status' => 'active',
+        ]);
+
+        $invoice = Invoice::factory()->create([
+            'contract_id' => $contract->id,
+            'customer_id' => $customer->id,
+            'customer_site_id' => $site->id,
+            'number' => 'INV-DETAIL-001',
+            'gross_total_halalas' => 100000,
+            'paid_total_halalas' => 40000,
+            'due_date' => '2026-07-20',
+        ]);
+
+        Payment::create([
+            'invoice_id' => $invoice->id,
+            'amount_halalas' => 40000,
+            'method' => 'bank_transfer',
+            'reference' => 'BANK-001',
+            'received_at' => '2026-07-02 10:00:00',
+        ]);
+
+        $this->actingAs($manager)->get("/app/contracts/{$contract->id}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Contracts/Show')
+                ->where('contract.reference', 'CON-DETAIL-001')
+                ->where('contract.customer.name', 'Riyadh Clinic Group')
+                ->where('contract.service_scope.0.area', 'Lobby')
+                ->where('contract.terms_and_conditions', 'Customer provides secure site access.')
+                ->where('assignmentStoreUrl', "/app/contracts/{$contract->id}/assignments")
+                ->where('assignments.0.worker.name', 'Ahmed Hassan')
+                ->where('assignments.0.weekday', 1)
+                ->where('finance.gross_total_halalas', 100000)
+                ->where('finance.paid_total_halalas', 40000)
+                ->where('finance.balance_halalas', 60000)
+                ->where('paymentPlan.0.status', 'paid')
+                ->where('paymentPlan.1.status', 'pending')
+                ->where('invoices.0.number', 'INV-DETAIL-001')
+                ->where('invoices.0.payments.0.reference', 'BANK-001')
+                ->has('workerOptions.0')
+                ->has('weekdayOptions.0')
+                ->has('assignmentStatuses.0')
+            );
+    }
+
+    public function test_contract_detail_exposes_assignment_assessment_for_required_weekly_visits(): void
+    {
+        $this->withoutVite();
+
+        $manager = User::factory()->create(['role' => 'operations']);
+        [$customer, $site, $service, $package] = $this->contractDependencies();
+        $mainWorker = Worker::factory()->create(['name' => 'Main Worker']);
+        $supportWorker = Worker::factory()->create(['name' => 'Support Worker']);
+        $contract = Contract::factory()->create([
+            'customer_id' => $customer->id,
+            'customer_site_id' => $site->id,
+            'service_id' => $service->id,
+            'service_package_id' => $package->id,
+            'agreed_workers' => 2,
+            'visits_per_week' => 3,
+            'hours_per_visit' => '2.00',
+            'planned_weekly_minutes' => 720,
+        ]);
+
+        Assignment::factory()->for($contract)->create([
+            'customer_site_id' => $site->id,
+            'service_id' => $service->id,
+            'worker_id' => $mainWorker->id,
+            'weekday' => 1,
+            'starts_at' => '08:00',
+            'ends_at' => '10:00',
+            'share_percent' => 70,
+            'status' => 'active',
+            'team_role' => 'main',
+        ]);
+
+        Assignment::factory()->for($contract)->create([
+            'customer_site_id' => $site->id,
+            'service_id' => $service->id,
+            'worker_id' => $supportWorker->id,
+            'weekday' => 1,
+            'starts_at' => '08:00',
+            'ends_at' => '10:00',
+            'share_percent' => 30,
+            'status' => 'active',
+            'team_role' => 'support',
+        ]);
+
+        $this->actingAs($manager)->get("/app/contracts/{$contract->id}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Contracts/Show')
+                ->where('assignmentAssessment.required_visits_per_week', 3)
+                ->where('assignmentAssessment.covered_visits_per_week', 1)
+                ->where('assignmentAssessment.missing_visits_per_week', 2)
+                ->where('assignmentAssessment.required_workers_per_visit', 2)
+                ->where('assignmentAssessment.ready_slots_count', 1)
+                ->where('assignmentAssessment.follow_ups.0.type', 'missing_visit_slots')
+                ->where('assignmentAssessment.slots.0.weekday', 1)
+                ->where('assignmentAssessment.slots.0.main_worker.name', 'Main Worker')
+                ->where('assignmentAssessment.slots.0.workers_count', 2)
+                ->where('assignments.0.team_role', 'main')
+                ->where('assignments.1.team_role', 'support')
+            );
+    }
+
+    public function test_manager_can_assign_worker_from_contract_detail(): void
+    {
+        $this->withoutVite();
+
+        $manager = User::factory()->create(['role' => 'operations']);
+        [$customer, $site, $service, $package] = $this->contractDependencies();
+        $contract = Contract::factory()->create([
+            'customer_id' => $customer->id,
+            'customer_site_id' => $site->id,
+            'service_id' => $service->id,
+            'service_package_id' => $package->id,
+        ]);
+        $worker = Worker::factory()->create();
+
+        $this->actingAs($manager)->post("/app/contracts/{$contract->id}/assignments", [
+            'worker_id' => $worker->id,
+            'weekday' => 3,
+            'starts_at' => '08:30',
+            'ends_at' => '11:30',
+            'share_percent' => 100,
+            'status' => 'active',
+            'team_role' => 'main',
+            'task_instructions' => [
+                ['label' => 'Clean reception glass', 'is_required' => true],
+                ['label' => 'Sanitize bathrooms', 'is_required' => true],
+                ['label' => 'Remove waste bags', 'is_required' => false],
+            ],
+        ])->assertRedirect();
+
+        $assignment = Assignment::query()->where([
+            'contract_id' => $contract->id,
+            'customer_site_id' => $site->id,
+            'service_id' => $service->id,
+            'worker_id' => $worker->id,
+            'weekday' => 3,
+            'starts_at' => '08:30',
+            'ends_at' => '11:30',
+            'share_percent' => 100,
+            'status' => 'active',
+            'team_role' => 'main',
+        ])->firstOrFail();
+
+        $this->assertSame([
+            ['label' => 'Clean reception glass', 'is_required' => true],
+            ['label' => 'Sanitize bathrooms', 'is_required' => true],
+            ['label' => 'Remove waste bags', 'is_required' => false],
+        ], $assignment->task_instructions);
+
+        $this->actingAs($manager)->get("/app/contracts/{$contract->id}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Contracts/Show')
+                ->where('assignments.0.task_instructions.0.label', 'Clean reception glass')
+                ->where('assignments.0.task_instructions.2.is_required', false)
+            );
+
+        $this->assertDatabaseHas('audit_logs', [
+            'user_id' => $manager->id,
+            'action' => 'assignment.created_from_contract',
+            'auditable_type' => Assignment::class,
+        ]);
+    }
+
+    public function test_contract_detail_exposes_assignment_capability_by_role(): void
+    {
+        $this->withoutVite();
+
+        $operations = User::factory()->create(['role' => 'operations']);
+        $sales = User::factory()->create(['role' => 'sales']);
+        [$customer, $site, $service, $package] = $this->contractDependencies();
+        $contract = Contract::factory()->create([
+            'customer_id' => $customer->id,
+            'customer_site_id' => $site->id,
+            'service_id' => $service->id,
+            'service_package_id' => $package->id,
+        ]);
+
+        $this->actingAs($operations)->get("/app/contracts/{$contract->id}")
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('canManageAssignments', true));
+
+        $this->actingAs($sales)->get("/app/contracts/{$contract->id}")
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('canManageAssignments', false));
+    }
+
+    public function test_manager_can_view_customer_contract_decisions_and_notification(): void
+    {
+        $this->withoutVite();
+
+        $manager = User::factory()->create(['role' => 'sales']);
+        [$customer, $site, $service, $package] = $this->contractDependencies();
+        $contract = Contract::factory()->create([
+            'customer_id' => $customer->id,
+            'customer_site_id' => $site->id,
+            'service_id' => $service->id,
+            'service_package_id' => $package->id,
+            'reference' => 'CON-ACCEPT-ADMIN',
+        ]);
+
+        $decisionId = DB::table('contract_decisions')->insertGetId([
+            'customer_id' => $customer->id,
+            'contract_id' => $contract->id,
+            'decision' => 'accepted',
+            'status' => 'pending_review',
+            'signer_name' => 'Riyadh Clinic Signer',
+            'signer_title' => 'Facilities Manager',
+            'signature_text' => 'Riyadh Clinic Signer',
+            'customer_note' => 'Accepted after commercial review.',
+            'accepted_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($manager)->get("/app/contracts/{$contract->id}?panel=acceptance")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Contracts/Show')
+                ->where('initialPanel', 'acceptance')
+                ->where('contractDecisions.0.id', $decisionId)
+                ->where('contractDecisions.0.customer.name', 'Riyadh Clinic Group')
+                ->where('contractDecisions.0.decision', 'accepted')
+                ->where('contractDecisions.0.status', 'pending_review')
+                ->where('contractDecisions.0.signer_name', 'Riyadh Clinic Signer')
+                ->where('notifications.pendingContractDecisions', 1)
+                ->where('notifications.contractDecisions.0.href', "/app/contracts/{$contract->id}?panel=acceptance"));
+    }
+
+    public function test_manager_can_print_and_download_signed_contract_document(): void
+    {
+        $this->withoutVite();
+
+        $manager = User::factory()->create(['role' => 'sales']);
+        [$customer, $site, $service, $package] = $this->contractDependencies();
+        $contract = Contract::factory()->create([
+            'customer_id' => $customer->id,
+            'customer_site_id' => $site->id,
+            'service_id' => $service->id,
+            'service_package_id' => $package->id,
+            'reference' => 'CON-SIGNED-ADMIN',
+            'monthly_fee_halalas' => 1500000,
+            'service_scope' => [
+                ['area' => 'Reception', 'tasks' => 'Daily lobby and glass cleaning'],
+            ],
+            'terms_and_conditions' => 'Monthly cleaning agreement terms apply.',
+            'payment_plan' => [
+                ['label' => 'Advance', 'day' => 1, 'percent' => 60],
+                ['label' => 'Balance', 'day' => 15, 'percent' => 40],
+            ],
+        ]);
+        DB::table('contract_decisions')->insert([
+            'customer_id' => $customer->id,
+            'contract_id' => $contract->id,
+            'decision' => 'accepted',
+            'status' => 'reviewed',
+            'signer_name' => 'Riyadh Clinic Signer',
+            'signer_title' => 'Facilities Manager',
+            'signature_text' => 'Riyadh Clinic Signer',
+            'customer_note' => 'Accepted for signature document.',
+            'accepted_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($manager)->get("/app/contracts/{$contract->id}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Contracts/Show')
+                ->where('contract.print_url', "/app/contracts/{$contract->id}/print")
+                ->where('contract.download_url', "/app/contracts/{$contract->id}/download"));
+
+        $this->actingAs($manager)
+            ->get("/app/contracts/{$contract->id}/print")
+            ->assertOk()
+            ->assertSee('CON-SIGNED-ADMIN')
+            ->assertSee('Riyadh Clinic Signer')
+            ->assertSee('Monthly cleaning agreement terms apply.');
+
+        $download = $this->actingAs($manager)
+            ->get("/app/contracts/{$contract->id}/download")
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf')
+            ->assertHeader('content-disposition', 'attachment; filename="CON-SIGNED-ADMIN.pdf"');
+
+        $this->assertStringStartsWith('%PDF-', $download->getContent());
+        $this->assertStringContainsString('CON-SIGNED-ADMIN', $download->getContent());
+        $this->assertStringContainsString('Riyadh Clinic Signer', $download->getContent());
+    }
+
+    public function test_manager_can_mark_customer_contract_decision_reviewed(): void
+    {
+        $this->withoutVite();
+
+        $manager = User::factory()->create(['role' => 'sales']);
+        [$customer, $site, $service, $package] = $this->contractDependencies();
+        $contract = Contract::factory()->create([
+            'customer_id' => $customer->id,
+            'customer_site_id' => $site->id,
+            'service_id' => $service->id,
+            'service_package_id' => $package->id,
+        ]);
+        $decisionId = DB::table('contract_decisions')->insertGetId([
+            'customer_id' => $customer->id,
+            'contract_id' => $contract->id,
+            'decision' => 'change_requested',
+            'status' => 'pending_review',
+            'customer_note' => 'Please revise the payment schedule.',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($manager)
+            ->patch("/app/contract-decisions/{$decisionId}/review", [
+                'admin_note' => 'Sales will update the payment plan.',
+            ])
+            ->assertRedirect("/app/contracts/{$contract->id}?panel=acceptance");
+
+        $this->assertDatabaseHas('contract_decisions', [
+            'id' => $decisionId,
+            'status' => 'reviewed',
+            'reviewed_by' => $manager->id,
+            'admin_note' => 'Sales will update the payment plan.',
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'user_id' => $manager->id,
+            'action' => 'contract_decision.reviewed',
+            'auditable_type' => 'App\\Models\\ContractDecision',
+            'auditable_id' => $decisionId,
+        ]);
+
+        $this->actingAs($manager)->get("/app/contracts/{$contract->id}?panel=acceptance")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('contractDecisions.0.status', 'reviewed')
+                ->where('contractDecisions.0.admin_note', 'Sales will update the payment plan.')
+                ->where('notifications.pendingContractDecisions', 0));
     }
 
     public function test_manager_can_submit_contract_monthly_fee_as_sar_decimal(): void

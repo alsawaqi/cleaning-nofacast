@@ -37,6 +37,7 @@ class Contract extends Model
         'overtime_policy',
         'service_scope',
         'terms_and_conditions',
+        'sla_kpi_template',
         'payment_plan',
         'billing_cycle',
         'notice_days',
@@ -60,6 +61,7 @@ class Contract extends Model
             'estimated_material_cost_halalas' => 'integer',
             'extra_hour_rate_halalas' => 'integer',
             'service_scope' => 'array',
+            'sla_kpi_template' => 'array',
             'payment_plan' => 'array',
             'billing_cycle' => 'string',
             'notice_days' => 'integer',
@@ -100,5 +102,25 @@ class Contract extends Model
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function visits(): HasMany
+    {
+        return $this->hasMany(Visit::class);
+    }
+
+    public function serviceRequests(): HasMany
+    {
+        return $this->hasMany(ServiceRequest::class);
+    }
+
+    public function contractDecisions(): HasMany
+    {
+        return $this->hasMany(ContractDecision::class);
+    }
+
+    public function visitFeedback(): HasMany
+    {
+        return $this->hasMany(VisitFeedback::class);
     }
 }

@@ -76,6 +76,97 @@ class PhaseOneOperationsTest extends TestCase
         $this->assertSame(['Sweep floors', 'Clean glass'], $visits->first()->checklistItems->pluck('label')->all());
     }
 
+    public function test_assignment_task_instructions_override_service_checklist_when_generating_visits(): void
+    {
+        $service = Service::factory()->create([
+            'checklist_template' => [
+                ['label' => 'Generic sweep'],
+                ['label' => 'Generic mop'],
+            ],
+        ]);
+        $contract = Contract::factory()->create([
+            'starts_on' => '2026-06-15',
+            'ends_on' => '2026-06-22',
+        ]);
+        $assignment = Assignment::factory()->for($contract)->create([
+            'service_id' => $service->id,
+            'weekday' => 1,
+            'starts_at' => '08:00',
+            'ends_at' => '12:00',
+            'task_instructions' => [
+                ['label' => 'Clean reception glass', 'is_required' => true],
+                ['label' => 'Sanitize bathrooms', 'is_required' => true],
+                ['label' => 'Remove waste bags', 'is_required' => false],
+            ],
+        ]);
+
+        $visits = app(ScheduleGenerator::class)->generateVisits(
+            $contract,
+            Carbon::parse('2026-06-15'),
+            Carbon::parse('2026-06-22'),
+        );
+
+        $this->assertCount(2, $visits);
+        $this->assertSame($assignment->id, $visits->first()->assignment_id);
+        $this->assertSame(
+            ['Clean reception glass', 'Sanitize bathrooms', 'Remove waste bags'],
+            $visits->first()->checklistItems->pluck('label')->all()
+        );
+        $this->assertSame([true, true, false], $visits->first()->checklistItems->pluck('is_required')->all());
+    }
+
+    public function test_team_assignment_generates_one_main_worker_visit_with_merged_team_tasks(): void
+    {
+        $service = Service::factory()->create([
+            'checklist_template' => [
+                ['label' => 'Generic sweep'],
+            ],
+        ]);
+        $contract = Contract::factory()->create([
+            'starts_on' => '2026-06-15',
+            'ends_on' => '2026-06-22',
+        ]);
+        $mainWorker = Worker::factory()->create();
+        $supportWorker = Worker::factory()->create();
+        $mainAssignment = Assignment::factory()->for($contract)->create([
+            'service_id' => $service->id,
+            'worker_id' => $mainWorker->id,
+            'weekday' => 1,
+            'starts_at' => '08:00',
+            'ends_at' => '12:00',
+            'team_role' => 'main',
+            'task_instructions' => [
+                ['label' => 'Open site and start timer', 'is_required' => true],
+            ],
+        ]);
+        Assignment::factory()->for($contract)->create([
+            'service_id' => $service->id,
+            'worker_id' => $supportWorker->id,
+            'weekday' => 1,
+            'starts_at' => '08:00',
+            'ends_at' => '12:00',
+            'team_role' => 'support',
+            'task_instructions' => [
+                ['label' => 'Clean rear stairwell', 'is_required' => false],
+            ],
+        ]);
+
+        $visits = app(ScheduleGenerator::class)->generateVisits(
+            $contract,
+            Carbon::parse('2026-06-15'),
+            Carbon::parse('2026-06-15'),
+        );
+
+        $this->assertCount(1, $visits);
+        $this->assertSame($mainAssignment->id, $visits->first()->assignment_id);
+        $this->assertSame($mainWorker->id, $visits->first()->worker_id);
+        $this->assertSame(
+            ['Open site and start timer', 'Clean rear stairwell'],
+            $visits->first()->checklistItems->pluck('label')->all()
+        );
+        $this->assertSame([true, false], $visits->first()->checklistItems->pluck('is_required')->all());
+    }
+
     public function test_payment_recorder_marks_invoice_partial_and_paid(): void
     {
         $invoice = Invoice::factory()->create([

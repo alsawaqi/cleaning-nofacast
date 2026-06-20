@@ -33,6 +33,7 @@ class Service extends Model
         'allowed_frequencies',
         'required_certificates',
         'checklist_template',
+        'sla_kpi_template',
         'is_active',
     ];
 
@@ -52,6 +53,7 @@ class Service extends Model
             'allowed_frequencies' => 'array',
             'required_certificates' => 'array',
             'checklist_template' => 'array',
+            'sla_kpi_template' => 'array',
             'is_active' => 'boolean',
         ];
     }

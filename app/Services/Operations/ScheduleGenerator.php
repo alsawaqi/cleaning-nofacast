@@ -47,24 +47,32 @@ class ScheduleGenerator
     public function generateVisits(Contract $contract, Carbon $from, Carbon $to): Collection
     {
         $created = collect();
-        $assignments = $contract->assignments()->with('service')->where('status', 'active')->get();
+        $assignments = $contract->assignments()
+            ->with('service')
+            ->where('status', 'active')
+            ->orderBy('weekday')
+            ->orderBy('starts_at')
+            ->orderByRaw("CASE WHEN team_role = 'main' THEN 0 ELSE 1 END")
+            ->get();
 
-        foreach ($assignments as $assignment) {
-            for ($date = $from->copy(); $date->lte($to); $date->addDay()) {
-                if ($date->dayOfWeekIso !== $assignment->weekday) {
-                    continue;
-                }
+        for ($date = $from->copy(); $date->lte($to); $date->addDay()) {
+            $dailySlots = $assignments
+                ->where('weekday', $date->dayOfWeekIso)
+                ->groupBy(fn (Assignment $assignment): string => $this->assignmentSlotKey($assignment));
+
+            foreach ($dailySlots as $slotAssignments) {
+                $mainAssignment = $this->mainAssignment($slotAssignments);
 
                 $visit = Visit::firstOrCreate([
-                    'assignment_id' => $assignment->id,
+                    'assignment_id' => $mainAssignment->id,
                     'scheduled_for' => $date->toDateString(),
                 ], [
                     'contract_id' => $contract->id,
-                    'worker_id' => $assignment->worker_id,
-                    'customer_site_id' => $assignment->customer_site_id,
-                    'service_id' => $assignment->service_id,
-                    'starts_at' => $assignment->starts_at,
-                    'ends_at' => $assignment->ends_at,
+                    'worker_id' => $mainAssignment->worker_id,
+                    'customer_site_id' => $mainAssignment->customer_site_id,
+                    'service_id' => $mainAssignment->service_id,
+                    'starts_at' => $mainAssignment->starts_at,
+                    'ends_at' => $mainAssignment->ends_at,
                     'status' => 'scheduled',
                 ]);
 
@@ -73,7 +81,7 @@ class ScheduleGenerator
                 }
 
                 if ($visit->checklist_items_count === 0) {
-                    foreach (($assignment->service?->checklist_template ?? []) as $item) {
+                    foreach ($this->teamChecklistTemplate($slotAssignments, $mainAssignment) as $item) {
                         $visit->checklistItems()->create([
                             'label' => $item['label'],
                             'is_required' => $item['is_required'] ?? true,
@@ -86,6 +94,83 @@ class ScheduleGenerator
         }
 
         return $created;
+    }
+
+    /**
+     * @return list<array{label: string, is_required?: bool}>
+     */
+    private function teamChecklistTemplate(Collection $assignments, Assignment $mainAssignment): array
+    {
+        $assignmentTasks = $assignments
+            ->flatMap(fn (Assignment $assignment): array => $this->assignmentTaskTemplate($assignment))
+            ->values()
+            ->all();
+
+        if ($assignmentTasks !== []) {
+            return $assignmentTasks;
+        }
+
+        return $mainAssignment->service?->checklist_template ?? [];
+    }
+
+    /**
+     * @return list<array{label: string, is_required?: bool}>
+     */
+    private function assignmentTaskTemplate(Assignment $assignment): array
+    {
+        return collect($assignment->task_instructions ?? [])
+            ->map(function (mixed $item): ?array {
+                if (is_string($item)) {
+                    $label = trim($item);
+
+                    return $label === '' ? null : ['label' => $label, 'is_required' => true];
+                }
+
+                if (! is_array($item)) {
+                    return null;
+                }
+
+                $label = trim((string) ($item['label'] ?? ''));
+
+                if ($label === '') {
+                    return null;
+                }
+
+                return [
+                    'label' => $label,
+                    'is_required' => (bool) ($item['is_required'] ?? true),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private function assignmentSlotKey(Assignment $assignment): string
+    {
+        return implode('|', [
+            $assignment->weekday,
+            $this->timeKey($assignment->starts_at),
+            $this->timeKey($assignment->ends_at),
+            $assignment->service_id ?? 'none',
+        ]);
+    }
+
+    /**
+     * @param  Collection<int, Assignment>  $assignments
+     */
+    private function mainAssignment(Collection $assignments): Assignment
+    {
+        return $assignments->firstWhere('team_role', 'main') ?? $assignments->first();
+    }
+
+    private function timeKey(mixed $time): string
+    {
+        if ($time instanceof \DateTimeInterface) {
+            return $time->format('H:i');
+        }
+
+        return substr((string) $time, 0, 5);
     }
 
     private function workerHasOverlap(int $workerId, int $weekday, string $startsAt, string $endsAt): bool

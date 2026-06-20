@@ -145,18 +145,41 @@ class DatabaseSeeder extends Seeder
             );
         });
 
-        $customer = Customer::updateOrCreate(
-            ['email' => 'facilities@riyadhclinic.test'],
-            [
-                'customer_type' => 'company',
-                'name' => 'Riyadh Clinic Group',
-                'phone' => '+966500000101',
-                'preferred_channel' => 'whatsapp',
-                'preferred_locale' => 'ar',
-                'vat_number' => '300000000000003',
-                'status' => 'active',
-            ],
-        );
+        $customerData = [
+            'customer_type' => 'company',
+            'user_id' => $users['customer']->id,
+            'name' => 'Riyadh Clinic Group',
+            'email' => 'facilities@riyadhclinic.test',
+            'phone' => '+966500000101',
+            'preferred_channel' => 'whatsapp',
+            'preferred_locale' => 'ar',
+            'vat_number' => '300000000000003',
+            'status' => 'active',
+        ];
+
+        $customer = Customer::query()
+            ->where('user_id', $users['customer']->id)
+            ->first();
+
+        $existingDemoCustomer = Customer::query()
+            ->where('email', $customerData['email'])
+            ->first();
+
+        if ($customer && $existingDemoCustomer && (int) $existingDemoCustomer->id !== (int) $customer->id) {
+            $existingDemoCustomer->forceFill([
+                'user_id' => null,
+                'email' => "facilities+legacy-{$existingDemoCustomer->id}@riyadhclinic.test",
+            ])->save();
+        }
+
+        if ($customer) {
+            $customer->forceFill($customerData)->save();
+        } else {
+            $customer = Customer::updateOrCreate(
+                ['email' => $customerData['email']],
+                $customerData,
+            );
+        }
 
         $site = CustomerSite::updateOrCreate(
             ['customer_id' => $customer->id, 'name' => 'Olaya Medical Center'],

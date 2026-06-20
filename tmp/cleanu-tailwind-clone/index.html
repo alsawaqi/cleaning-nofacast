@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Responsive cleaning-services homepage recreated with Tailwind CSS, HTML and vanilla JavaScript." />
+  <title>Cleanu — Cleaning Service</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body class="bg-white font-[Roboto] text-[#56627a] antialiased selection:bg-[#ffb703] selection:text-[#071b3d]">
+  <!-- SVG icon library -->
+  <svg aria-hidden="true" class="absolute h-0 w-0 overflow-hidden">
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m4 7 8 6 8-6" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M7.1 3.5 4.6 5.1c-.9.6-1.3 1.7-.9 2.7 2.2 6.1 6.4 10.3 12.5 12.5 1 .4 2.1 0 2.7-.9l1.6-2.5c.5-.8.3-1.8-.5-2.4l-3-2.1c-.7-.5-1.7-.4-2.3.2l-1.5 1.5a13.4 13.4 0 0 1-3.3-3.3l1.5-1.5c.6-.6.7-1.6.2-2.3l-2.1-3c-.6-.8-1.6-1-2.4-.5Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m16 16 4.3 4.3" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m7 9.5 5 5 5-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m9 7 8 5-8 5V7Z" fill="currentColor"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></symbol>
+    <symbol id="i-house" viewBox="0 0 24 24"><path d="m3 11 9-7 9 7M5.5 10v9h13v-9M9 19v-5h6v5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></symbol>
+    <symbol id="i-building" viewBox="0 0 24 24"><path d="M5 21V4h10v17M15 9h4v12M8 8h1m3 0h1M8 12h1m3 0h1M8 16h1m3 0h1M3 21h18" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.1 3.2L16 7.5l-2.9 1.3L12 12l-1.1-3.2L8 7.5l2.9-1.3L12 3Zm6 8 .8 2.2L21 14l-2.2.8L18 17l-.8-2.2L15 14l2.2-.8L18 11ZM6 13l1.1 3.2L10 17.5l-2.9 1.3L6 22l-1.1-3.2L2 17.5l2.9-1.3L6 13Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.5"/></symbol>
+    <symbol id="i-kitchen" viewBox="0 0 24 24"><path d="M5 4v16M19 4v16M5 9h14M8 4v5m4-5v5m4-5v5M8 13h3v3H8v-3Zm6 0h2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></symbol>
+    <symbol id="i-window" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 4v16M4 12h16" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+    <symbol id="i-sofa" viewBox="0 0 24 24"><path d="M6 11V8a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v3M4 11a2 2 0 0 0-2 2v4h20v-4a2 2 0 0 0-4 0v1H6v-1a2 2 0 0 0-2-2Zm1 6v2m14-2v2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></symbol>
+    <symbol id="i-carpet" viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Zm0 12h14M9 8h6m-6 4h6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></symbol>
+    <symbol id="i-spray" viewBox="0 0 24 24"><path d="M10 7h7l2 2v2h-5M8 7V4h5v3M7 10h7l1 10H6l1-10Zm3 3h2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.7 3.2 8 7.5 9.5 4.3-1.5 7.5-4.8 7.5-9.5V6L12 3Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.7"/><path d="m8.5 12 2.2 2.2 4.8-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 3v4m8-4v4M3 10h18m-13 4h3m2 0h3m-8 3h3" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.7"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.7"/></symbol>
+    <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 10h.01M15.5 10h.01M8 14.5c1.1 1.3 2.4 2 4 2s2.9-.7 4-2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"/></symbol>
+    <symbol id="i-quote" viewBox="0 0 24 24"><path d="M5 7h6v6H7c0 2 1 3.3 3 4l-1 2c-4-1.2-6-3.7-6-7V9a2 2 0 0 1 2-2Zm10 0h6v6h-4c0 2 1 3.3 3 4l-1 2c-4-1.2-6-3.7-6-7V9a2 2 0 0 1 2-2Z" fill="currentColor"/></symbol>
+    <symbol id="i-location" viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.7"/><circle cx="12" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+    <symbol id="i-facebook" viewBox="0 0 24 24"><path d="M14 8h3V4h-3c-3 0-5 2-5 5v2H6v4h3v7h4v-7h3l1-4h-4V9c0-.7.3-1 1-1Z" fill="currentColor"/></symbol>
+    <symbol id="i-twitter" viewBox="0 0 24 24"><path d="M21 7.2c-.7.3-1.4.5-2.2.6a3.8 3.8 0 0 0 1.7-2.1c-.7.4-1.6.7-2.4.9A3.8 3.8 0 0 0 11.5 9c0 .3 0 .6.1.9A10.8 10.8 0 0 1 3.8 6c-1.1 1.8-.5 4.2 1.3 5.3-.6 0-1.2-.2-1.7-.5 0 1.9 1.4 3.5 3.2 3.8-.6.2-1.1.2-1.7.1.5 1.6 2 2.7 3.7 2.7A7.7 7.7 0 0 1 3 19c1.8 1.1 3.8 1.7 6 1.7 7.2 0 11.2-6 11.2-11.2v-.5c.7-.5 1.3-1.1 1.8-1.8Z" fill="currentColor"/></symbol>
+    <symbol id="i-linkedin" viewBox="0 0 24 24"><path d="M5.4 8.4H2V22h3.4V8.4ZM3.7 2A2 2 0 1 0 3.7 6a2 2 0 0 0 0-4Zm8.2 6.4H8.6V22h3.3v-6.7c0-1.8.3-3.5 2.6-3.5s2.3 2.1 2.3 3.6V22H20v-7.4c0-3.6-.8-6.4-5-6.4-1.9 0-3.2 1-3.8 1.9h-.1V8.4Z" fill="currentColor"/></symbol>
+    <symbol id="i-instagram" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m6 14 6-6 6 6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9"/></symbol>
+  </svg>
+
+  <!-- Preloader -->
+  <div id="preloader" class="fixed inset-0 z-[100] grid place-items-center bg-white transition-opacity duration-500" aria-hidden="true">
+    <div class="relative h-20 w-20">
+      <span class="absolute inset-0 rounded-full border-4 border-[#e8eefc]"></span>
+      <span class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-[#1040b6]"></span>
+      <svg class="absolute inset-5 text-[#ffb703]"><use href="#i-sparkles"></use></svg>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="pointer-events-none fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 translate-y-8 rounded-xl bg-[#071b3d] px-5 py-3 text-sm font-semibold text-white opacity-0 shadow-2xl transition duration-300" role="status" aria-live="polite"></div>
+
+  <!-- Overlay -->
+  <button id="page-overlay" class="pointer-events-none fixed inset-0 z-[70] bg-[#071b3d]/65 opacity-0 backdrop-blur-[2px] transition duration-300" aria-label="Close overlay"></button>
+
+  <!-- Side drawer -->
+  <aside id="side-drawer" class="fixed right-0 top-0 z-[80] h-full w-full max-w-[430px] translate-x-full overflow-y-auto bg-white p-8 shadow-2xl transition-transform duration-300 sm:p-10" aria-hidden="true">
+    <div class="flex items-center justify-between">
+      <a href="#home" class="flex items-center gap-3" aria-label="Cleanu home">
+        <span class="grid h-12 w-12 place-items-center rounded-xl bg-[#1040b6] text-[#ffb703] shadow-lg shadow-blue-900/20">
+          <svg class="h-7 w-7"><use href="#i-house"></use></svg>
+        </span>
+        <span>
+          <span class="block font-[Poppins] text-2xl font-extrabold leading-none text-[#071b3d]">Cleanu</span>
+          <span class="mt-1 block text-[10px] font-bold uppercase tracking-[0.24em] text-[#7f899d]">Cleaning Service</span>
+        </span>
+      </a>
+      <button class="drawer-close grid h-11 w-11 place-items-center rounded-full bg-[#f1f5fd] text-[#071b3d] transition hover:bg-[#1040b6] hover:text-white" aria-label="Close information panel">
+        <svg class="h-5 w-5"><use href="#i-x"></use></svg>
+      </button>
+    </div>
+
+    <p class="mt-9 leading-7 text-[#69758b]">Professional residential and commercial cleaning delivered by trained teams, modern equipment, and flexible schedules.</p>
+
+    <div class="mt-8 overflow-hidden rounded-2xl">
+      <img class="h-52 w-full object-cover" src="https://images.unsplash.com/photo-1686178827149-6d55c72d81df?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8Y2xlYW5pbmclMjBzZXJ2aWNlc3xlbnwwfHwwfHx8MA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Professional upholstery cleaning" />
+    </div>
+
+    <div class="mt-8 space-y-5">
+      <div class="flex gap-4">
+        <span class="grid h-12 w-12 flex-none place-items-center rounded-full bg-[#eef3ff] text-[#1040b6]"><svg class="h-5 w-5"><use href="#i-location"></use></svg></span>
+        <div><h3 class="font-[Poppins] font-bold text-[#071b3d]">Address</h3><p class="mt-1 text-sm">5919 Trussville Crossings Pkwy, Dusting Town</p></div>
+      </div>
+      <div class="flex gap-4">
+        <span class="grid h-12 w-12 flex-none place-items-center rounded-full bg-[#fff6d7] text-[#d99500]"><svg class="h-5 w-5"><use href="#i-mail"></use></svg></span>
+        <div><h3 class="font-[Poppins] font-bold text-[#071b3d]">Email</h3><a href="mailto:hello@cleanu.test" class="mt-1 block text-sm hover:text-[#1040b6]">hello@cleanu.test</a></div>
+      </div>
+      <div class="flex gap-4">
+        <span class="grid h-12 w-12 flex-none place-items-center rounded-full bg-[#eef3ff] text-[#1040b6]"><svg class="h-5 w-5"><use href="#i-phone"></use></svg></span>
+        <div><h3 class="font-[Poppins] font-bold text-[#071b3d]">Contact</h3><a href="tel:+442073284499" class="mt-1 block text-sm hover:text-[#1040b6]">+44 20 7328 4499</a></div>
+      </div>
+    </div>
+
+    <div class="mt-10 rounded-2xl bg-[#f5f8ff] p-6">
+      <h3 class="font-[Poppins] text-lg font-bold text-[#071b3d]">Get subscribed</h3>
+      <form class="newsletter-form mt-4 flex overflow-hidden rounded-lg bg-white shadow-sm" novalidate>
+        <label class="sr-only" for="drawer-email">Email address</label>
+        <input id="drawer-email" type="email" required placeholder="Your email" class="min-w-0 flex-1 bg-transparent px-4 py-3 text-sm text-[#071b3d] outline-none" />
+        <button class="grid w-12 place-items-center bg-[#1040b6] text-white transition hover:bg-[#ffb703] hover:text-[#071b3d]" aria-label="Subscribe">
+          <svg class="h-5 w-5"><use href="#i-arrow-right"></use></svg>
+        </button>
+      </form>
+    </div>
+
+    <div class="mt-8 flex gap-3">
+      <a href="#" aria-label="Facebook" class="grid h-10 w-10 place-items-center rounded-full border border-[#dfe6f3] text-[#071b3d] transition hover:border-[#1040b6] hover:bg-[#1040b6] hover:text-white"><svg class="h-4 w-4"><use href="#i-facebook"></use></svg></a>
+      <a href="#" aria-label="Twitter" class="grid h-10 w-10 place-items-center rounded-full border border-[#dfe6f3] text-[#071b3d] transition hover:border-[#1040b6] hover:bg-[#1040b6] hover:text-white"><svg class="h-4 w-4"><use href="#i-twitter"></use></svg></a>
+      <a href="#" aria-label="LinkedIn" class="grid h-10 w-10 place-items-center rounded-full border border-[#dfe6f3] text-[#071b3d] transition hover:border-[#1040b6] hover:bg-[#1040b6] hover:text-white"><svg class="h-4 w-4"><use href="#i-linkedin"></use></svg></a>
+      <a href="#" aria-label="Instagram" class="grid h-10 w-10 place-items-center rounded-full border border-[#dfe6f3] text-[#071b3d] transition hover:border-[#1040b6] hover:bg-[#1040b6] hover:text-white"><svg class="h-4 w-4"><use href="#i-instagram"></use></svg></a>
+    </div>
+  </aside>
+
+  <!-- Search panel -->
+  <div id="search-panel" class="fixed inset-x-0 top-0 z-[85] -translate-y-full bg-white px-5 py-8 shadow-2xl transition-transform duration-300" aria-hidden="true">
+    <div class="mx-auto flex max-w-5xl items-center gap-4">
+      <svg class="h-6 w-6 flex-none text-[#1040b6]"><use href="#i-search"></use></svg>
+      <label for="site-search" class="sr-only">Search website</label>
+      <input id="site-search" type="search" placeholder="Type to search…" class="min-w-0 flex-1 border-b-2 border-[#dce4f4] py-3 font-[Poppins] text-xl font-semibold text-[#071b3d] outline-none transition focus:border-[#1040b6]" />
+      <button id="search-close" class="grid h-11 w-11 place-items-center rounded-full bg-[#f1f5fd] text-[#071b3d] transition hover:bg-[#1040b6] hover:text-white" aria-label="Close search">
+        <svg class="h-5 w-5"><use href="#i-x"></use></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Video modal -->
+  <div id="video-modal" class="pointer-events-none fixed inset-0 z-[95] grid place-items-center px-5 opacity-0 transition duration-300" aria-hidden="true">
+    <div class="relative w-full max-w-4xl translate-y-5 overflow-hidden rounded-2xl bg-black shadow-2xl transition-transform duration-300" data-video-dialog>
+      <button id="video-close" class="absolute right-4 top-4 z-10 grid h-11 w-11 place-items-center rounded-full bg-white/90 text-[#071b3d] transition hover:bg-[#ffb703]" aria-label="Close video">
+        <svg class="h-5 w-5"><use href="#i-x"></use></svg>
+      </button>
+      <div class="aspect-video bg-[#071b3d]">
+        <iframe id="video-frame" class="h-full w-full" title="Cleaning service video" src="about:blank" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header id="site-header" class="relative z-50">
+    <div class="hidden bg-[#0a2f95] text-white lg:block">
+      <div class="mx-auto flex h-11 max-w-[1180px] items-center justify-between px-5">
+        <div class="flex items-center gap-7 text-xs font-medium">
+          <span class="flex items-center gap-2"><svg class="h-4 w-4 text-[#ffb703]"><use href="#i-clock"></use></svg> Working Hours: 8:00 AM – 7:45 PM</span>
+          <a href="mailto:info@cleanu.test" class="flex items-center gap-2 transition hover:text-[#ffcc38]"><svg class="h-4 w-4 text-[#ffb703]"><use href="#i-mail"></use></svg> info@cleanu.test</a>
+        </div>
+        <div class="flex items-center gap-4">
+          <a href="#" aria-label="Facebook" class="transition hover:text-[#ffb703]"><svg class="h-3.5 w-3.5"><use href="#i-facebook"></use></svg></a>
+          <a href="#" aria-label="Twitter" class="transition hover:text-[#ffb703]"><svg class="h-3.5 w-3.5"><use href="#i-twitter"></use></svg></a>
+          <a href="#" aria-label="LinkedIn" class="transition hover:text-[#ffb703]"><svg class="h-3.5 w-3.5"><use href="#i-linkedin"></use></svg></a>
+        </div>
+      </div>
+    </div>
+
+    <nav id="main-nav" class="bg-white transition-shadow duration-300">
+      <div class="mx-auto flex h-[82px] max-w-[1180px] items-center justify-between px-5">
+        <a href="#home" class="flex items-center gap-3" aria-label="Cleanu home">
+          <span class="relative grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br from-[#ffb703] via-[#ffb703] to-[#0d65c5] text-white shadow-lg shadow-blue-900/15">
+            <svg class="h-7 w-7"><use href="#i-house"></use></svg>
+            <svg class="absolute -right-1 -top-1 h-4 w-4 text-[#1040b6]"><use href="#i-sparkles"></use></svg>
+          </span>
+          <span>
+            <span class="block font-[Poppins] text-[25px] font-extrabold leading-none text-[#071b3d]">Cleanu</span>
+            <span class="mt-1 block text-[9px] font-bold uppercase tracking-[0.22em] text-[#7a8598]">Cleaning Service</span>
+          </span>
+        </a>
+
+        <div class="hidden items-center gap-1 lg:flex">
+          <div class="nav-group relative">
+            <button class="nav-link flex items-center gap-1.5 px-3 py-7 text-[13px] font-bold uppercase tracking-[0.04em] text-[#172443] transition hover:text-[#1040b6]">Home <svg class="h-3 w-3"><use href="#i-chevron-down"></use></svg></button>
+            <div class="nav-dropdown invisible absolute left-0 top-full w-56 translate-y-3 rounded-b-lg border-t-2 border-[#ffb703] bg-white py-3 opacity-0 shadow-2xl transition duration-200">
+              <a href="#home" class="dropdown-link">Cleaning Service</a>
+              <a href="#services" class="dropdown-link">Pest Control</a>
+              <a href="#services" class="dropdown-link">Dry Cleaning</a>
+              <a href="#services" class="dropdown-link">House Cleaner</a>
+              <a href="#services" class="dropdown-link">Plumber</a>
+              <a href="#services" class="dropdown-link">Electrician</a>
+            </div>
+          </div>
+          <div class="nav-group relative">
+            <button class="nav-link flex items-center gap-1.5 px-3 py-7 text-[13px] font-bold uppercase tracking-[0.04em] text-[#172443] transition hover:text-[#1040b6]">Pages <svg class="h-3 w-3"><use href="#i-chevron-down"></use></svg></button>
+            <div class="nav-dropdown invisible absolute left-0 top-full w-60 translate-y-3 rounded-b-lg border-t-2 border-[#ffb703] bg-white py-3 opacity-0 shadow-2xl transition duration-200">
+              <a href="#about" class="dropdown-link">About Us</a>
+              <a href="#process" class="dropdown-link">Work Process</a>
+              <a href="#pricing" class="dropdown-link">Pricing Plans</a>
+              <a href="#testimonials" class="dropdown-link">Testimonials</a>
+              <a href="#contact" class="dropdown-link">Contact Us</a>
+            </div>
+          </div>
+          <a href="#projects" class="nav-link px-3 py-7 text-[13px] font-bold uppercase tracking-[0.04em] text-[#172443] transition hover:text-[#1040b6]">Projects</a>
+          <div class="nav-group relative">
+            <button class="nav-link flex items-center gap-1.5 px-3 py-7 text-[13px] font-bold uppercase tracking-[0.04em] text-[#172443] transition hover:text-[#1040b6]">Services <svg class="h-3 w-3"><use href="#i-chevron-down"></use></svg></button>
+            <div class="nav-dropdown invisible absolute left-0 top-full w-60 translate-y-3 rounded-b-lg border-t-2 border-[#ffb703] bg-white py-3 opacity-0 shadow-2xl transition duration-200">
+              <a href="#services" class="dropdown-link">Residential Cleaning</a>
+              <a href="#services" class="dropdown-link">Commercial Cleaning</a>
+              <a href="#services" class="dropdown-link">Window Cleaning</a>
+              <a href="#services" class="dropdown-link">Carpet Cleaning</a>
+            </div>
+          </div>
+          <a href="#blog" class="nav-link px-3 py-7 text-[13px] font-bold uppercase tracking-[0.04em] text-[#172443] transition hover:text-[#1040b6]">Blog</a>
+          <a href="#contact" class="nav-link px-3 py-7 text-[13px] font-bold uppercase tracking-[0.04em] text-[#172443] transition hover:text-[#1040b6]">Contact</a>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="search-open" class="hidden h-11 w-11 place-items-center rounded-full text-[#071b3d] transition hover:bg-[#f1f5fd] lg:grid" aria-label="Open search">
+            <svg class="h-5 w-5"><use href="#i-search"></use></svg>
+          </button>
+          <button id="drawer-open" class="hidden h-11 w-11 place-items-center rounded-full bg-[#1040b6] text-white shadow-lg shadow-blue-900/15 transition hover:bg-[#ffb703] hover:text-[#071b3d] sm:grid" aria-label="Open information panel">
+            <svg class="h-5 w-5"><use href="#i-menu"></use></svg>
+          </button>
+          <button id="mobile-menu-open" class="grid h-11 w-11 place-items-center rounded-full bg-[#1040b6] text-white lg:hidden" aria-label="Open mobile menu" aria-expanded="false">
+            <svg class="h-5 w-5"><use href="#i-menu"></use></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="max-h-0 overflow-hidden border-t border-[#eef1f6] bg-white transition-[max-height] duration-300 lg:hidden">
+        <div class="mx-auto max-w-[1180px] px-5 py-4">
+          <a href="#home" class="mobile-link">Home</a>
+          <a href="#about" class="mobile-link">About</a>
+          <a href="#services" class="mobile-link">Services</a>
+          <a href="#process" class="mobile-link">Process</a>
+          <a href="#projects" class="mobile-link">Projects</a>
+          <a href="#pricing" class="mobile-link">Pricing</a>
+          <a href="#blog" class="mobile-link">Blog</a>
+          <a href="#contact" class="mobile-link">Contact</a>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Hero -->
+    <section id="home" class="relative min-h-[660px] overflow-hidden bg-[#0d3aa4] lg:min-h-[720px]">
+      <div class="hero-slide absolute inset-0 is-active" data-slide="0">
+        <div class="absolute inset-0 bg-cover bg-center" style="background-image:url('https://images.unsplash.com/photo-1647381518264-97ff1835026f?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjB8fGNsZWFuaW5nJTIwc2VydmljZXN8ZW58MHx8MHx8fDA%3D&ixlib=rb-4.1.0&q=60&w=3000')"></div>
+        <div class="absolute inset-0 bg-gradient-to-r from-[#0c349b]/95 via-[#0c349b]/75 to-[#071b3d]/20"></div>
+        <div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,.10),transparent_55%)]"></div>
+        <div class="relative mx-auto flex min-h-[660px] max-w-[1180px] items-center px-5 pb-20 pt-20 lg:min-h-[720px]">
+          <div class="hero-content max-w-[700px] text-white">
+            <div class="mb-5 flex items-center gap-3 text-sm font-bold uppercase tracking-[0.14em]">
+              <span class="h-[2px] w-10 bg-[#ffb703]"></span>
+              Best cleaning service
+            </div>
+            <h1 class="font-[Poppins] text-4xl font-extrabold leading-[1.12] sm:text-5xl lg:text-[66px]">Amazing quality cleaning service agency</h1>
+            <p class="mt-6 max-w-xl text-base leading-7 text-white/80 sm:text-lg">Reliable home and workplace cleaning with careful teams, flexible plans, and a spotless finish every time.</p>
+            <div class="mt-9 flex flex-wrap items-center gap-5">
+              <a href="#estimate" class="inline-flex items-center gap-3 rounded-md bg-[#1040b6] px-7 py-4 text-sm font-bold uppercase tracking-[0.06em] text-white shadow-xl shadow-blue-950/20 transition hover:-translate-y-1 hover:bg-[#ffb703] hover:text-[#071b3d]">Book a schedule <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></a>
+              <button class="video-open group flex items-center gap-3 font-[Poppins] text-sm font-semibold" data-video="https://www.youtube.com/embed/7EHnQ0VM4KY?autoplay=1">
+                <span class="grid h-14 w-14 place-items-center rounded-full bg-[#ffb703] text-[#071b3d] shadow-lg shadow-black/20 transition group-hover:scale-110"><svg class="h-6 w-6 translate-x-[1px]"><use href="#i-play"></use></svg></span>
+                <span>Watch our story</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-slide absolute inset-0" data-slide="1">
+        <div class="absolute inset-0 bg-cover bg-center" style="background-image:url('https://images.unsplash.com/photo-1740657254989-42fe9c3b8cce?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Y2xlYW5pbmclMjBzZXJ2aWNlc3xlbnwwfHwwfHx8MA%3D%3D&ixlib=rb-4.1.0&q=60&w=3000')"></div>
+        <div class="absolute inset-0 bg-gradient-to-r from-[#071b3d]/95 via-[#0c349b]/78 to-[#0c349b]/25"></div>
+        <div class="relative mx-auto flex min-h-[660px] max-w-[1180px] items-center px-5 pb-20 pt-20 lg:min-h-[720px]">
+          <div class="hero-content max-w-[700px] text-white">
+            <div class="mb-5 flex items-center gap-3 text-sm font-bold uppercase tracking-[0.14em]">
+              <span class="h-[2px] w-10 bg-[#ffb703]"></span>
+              Professional sanitizing
+            </div>
+            <h2 class="font-[Poppins] text-4xl font-extrabold leading-[1.12] sm:text-5xl lg:text-[66px]">Disinfecting &amp; deodorizing services</h2>
+            <p class="mt-6 max-w-xl text-base leading-7 text-white/80 sm:text-lg">Deep sanitation for high-touch spaces using proven processes that leave every room fresher and safer.</p>
+            <div class="mt-9 flex flex-wrap items-center gap-5">
+              <a href="#estimate" class="inline-flex items-center gap-3 rounded-md bg-[#ffb703] px-7 py-4 text-sm font-bold uppercase tracking-[0.06em] text-[#071b3d] shadow-xl shadow-blue-950/20 transition hover:-translate-y-1 hover:bg-white">Get free estimate <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></a>
+              <button class="video-open group flex items-center gap-3 font-[Poppins] text-sm font-semibold" data-video="https://www.youtube.com/embed/7EHnQ0VM4KY?autoplay=1">
+                <span class="grid h-14 w-14 place-items-center rounded-full bg-white text-[#1040b6] shadow-lg shadow-black/20 transition group-hover:scale-110"><svg class="h-6 w-6 translate-x-[1px]"><use href="#i-play"></use></svg></span>
+                <span>See how it works</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bubbles -->
+      <span class="bubble left-[6%] top-[20%] h-14 w-14 [animation-delay:-1s]"></span>
+      <span class="bubble left-[15%] top-[48%] h-8 w-8 [animation-delay:-3s]"></span>
+      <span class="bubble right-[18%] top-[24%] h-20 w-20 [animation-delay:-5s]"></span>
+      <span class="bubble right-[8%] top-[56%] h-10 w-10 [animation-delay:-2s]"></span>
+      <span class="bubble bottom-[10%] left-[54%] h-7 w-7 [animation-delay:-4s]"></span>
+
+      <div class="absolute bottom-8 left-1/2 z-20 flex -translate-x-1/2 items-center gap-4 lg:left-auto lg:right-14 lg:translate-x-0">
+        <button id="hero-prev" class="grid h-12 w-12 place-items-center rounded-full border border-white/30 bg-white/10 text-white backdrop-blur-sm transition hover:border-[#ffb703] hover:bg-[#ffb703] hover:text-[#071b3d]" aria-label="Previous slide"><svg class="h-5 w-5"><use href="#i-chevron-left"></use></svg></button>
+        <div class="flex gap-2" aria-label="Hero slides">
+          <button class="hero-dot is-active" data-hero-dot="0" aria-label="Show slide 1"></button>
+          <button class="hero-dot" data-hero-dot="1" aria-label="Show slide 2"></button>
+        </div>
+        <button id="hero-next" class="grid h-12 w-12 place-items-center rounded-full border border-white/30 bg-white/10 text-white backdrop-blur-sm transition hover:border-[#ffb703] hover:bg-[#ffb703] hover:text-[#071b3d]" aria-label="Next slide"><svg class="h-5 w-5"><use href="#i-chevron-right"></use></svg></button>
+      </div>
+    </section>
+
+    <!-- About -->
+    <section id="about" class="relative overflow-hidden py-24 lg:py-32">
+      <div class="absolute -left-20 top-10 h-64 w-64 rounded-full bg-[#f2f6ff]"></div>
+      <svg class="absolute right-8 top-20 h-40 w-40 text-[#ffb703]/15"><use href="#i-sparkles"></use></svg>
+      <div class="reveal relative mx-auto grid max-w-[1180px] items-center gap-16 px-5 lg:grid-cols-[1.02fr_.98fr]">
+        <div class="relative mx-auto w-full max-w-[560px] pb-14 pr-10 sm:pr-20">
+          <div class="overflow-hidden rounded-2xl shadow-2xl shadow-blue-950/10">
+            <img class="h-[480px] w-full object-cover" src="https://images.unsplash.com/photo-1686178827149-6d55c72d81df?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8Y2xlYW5pbmclMjBzZXJ2aWNlc3xlbnwwfHwwfHx8MA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Cleaner vacuuming a sofa" />
+          </div>
+          <div class="absolute bottom-0 right-0 h-52 w-52 overflow-hidden rounded-full border-[10px] border-white shadow-xl sm:h-60 sm:w-60">
+            <img class="h-full w-full object-cover" src="https://images.unsplash.com/photo-1642505172378-a6f5e5b15580?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fGNsZWFuaW5nJTIwc2VydmljZXN8ZW58MHx8MHx8fDA%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Kitchen surface cleaning" />
+          </div>
+          <div class="absolute -left-3 bottom-10 rounded-2xl bg-[#ffb703] px-6 py-5 text-[#071b3d] shadow-xl sm:-left-10 sm:px-8">
+            <span class="block font-[Poppins] text-4xl font-extrabold leading-none sm:text-5xl">26</span>
+            <span class="mt-2 block text-xs font-bold uppercase tracking-[0.12em]">Years experience</span>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-kicker">About our company</div>
+          <h2 class="section-title mt-4">We are committed to give our best services</h2>
+          <blockquote class="mt-7 border-l-4 border-[#1040b6] bg-[#f7f9fd] px-6 py-5 font-[Poppins] text-base font-semibold leading-7 text-[#172443] shadow-sm">Local operations teams are available every day and ready to respond when your space needs attention.</blockquote>
+          <p class="mt-6 leading-7">Our trained cleaners follow detailed checklists, use modern equipment, and treat every property with care. Choose a one-time clean or build a recurring plan around your routine.</p>
+          <div class="mt-8 flex flex-wrap items-center gap-6">
+            <a href="#contact" class="primary-button">Contact us <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></a>
+            <div class="flex items-center gap-4">
+              <span class="grid h-12 w-12 place-items-center rounded-full bg-[#fff3c8] text-[#d89100]"><svg class="h-5 w-5"><use href="#i-phone"></use></svg></span>
+              <span><span class="block text-xs font-medium">Get free estimate</span><a href="tel:+442073284499" class="font-[Poppins] font-bold text-[#071b3d] hover:text-[#1040b6]">+44 20 7328 4499</a></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Residential / Commercial -->
+    <section class="bg-[#f5f8ff] py-24 lg:py-28">
+      <div class="mx-auto max-w-[1180px] px-5">
+        <div class="reveal grid overflow-hidden rounded-[28px] bg-[#1040b6] shadow-2xl shadow-blue-950/10 lg:grid-cols-2">
+          <div class="relative overflow-hidden p-8 text-white sm:p-12 lg:p-14">
+            <span class="absolute -right-20 -top-20 h-64 w-64 rounded-full border-[50px] border-white/5"></span>
+            <div class="relative">
+              <div class="section-kicker text-[#ffcc38] before:bg-[#ffb703]">One time / recurring</div>
+              <h2 class="mt-4 font-[Poppins] text-3xl font-extrabold sm:text-4xl">Residential Cleaning</h2>
+              <p class="mt-5 max-w-xl leading-7 text-white/75">Keep every room comfortable with a tailored checklist that covers the everyday details and the hard-to-reach areas.</p>
+              <div class="mt-8 grid grid-cols-2 gap-x-5 gap-y-4 text-sm font-medium sm:grid-cols-2">
+                <span class="check-line-light">Kitchen</span><span class="check-line-light">Bathrooms</span>
+                <span class="check-line-light">Bedrooms</span><span class="check-line-light">Living rooms</span>
+                <span class="check-line-light">Seasonal clean</span><span class="check-line-light">Move in / out</span>
+                <span class="check-line-light">Post construction</span><span class="check-line-light">Express service</span>
+              </div>
+              <a href="#estimate" class="mt-9 inline-flex items-center gap-3 rounded-md bg-[#ffb703] px-6 py-3.5 text-sm font-bold uppercase tracking-[0.06em] text-[#071b3d] transition hover:bg-white">Free estimate <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></a>
+            </div>
+          </div>
+          <div class="relative min-h-[430px] overflow-hidden">
+            <img class="absolute inset-0 h-full w-full object-cover" src="https://images.unsplash.com/photo-1647381518264-97ff1835026f?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjB8fGNsZWFuaW5nJTIwc2VydmljZXN8ZW58MHx8MHx8fDA%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Residential cleaner with broom" />
+            <div class="absolute inset-0 bg-gradient-to-t from-[#071b3d]/55 to-transparent"></div>
+            <div class="absolute bottom-7 right-7 max-w-[210px] rounded-2xl bg-white p-5 text-[#071b3d] shadow-xl">
+              <span class="block font-[Poppins] text-3xl font-extrabold text-[#1040b6]">29% Off</span>
+              <span class="mt-1 block text-sm font-semibold">for new customers</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="reveal mt-10 grid overflow-hidden rounded-[28px] bg-white shadow-2xl shadow-blue-950/8 lg:grid-cols-2">
+          <div class="relative min-h-[430px] overflow-hidden lg:order-1">
+            <img class="absolute inset-0 h-full w-full object-cover" src="https://images.unsplash.com/photo-1740657254989-42fe9c3b8cce?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Y2xlYW5pbmclMjBzZXJ2aWNlc3xlbnwwfHwwfHx8MA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Commercial floor cleaning" />
+            <div class="absolute inset-0 bg-gradient-to-t from-[#071b3d]/50 to-transparent"></div>
+            <div class="absolute bottom-7 left-7 max-w-[210px] rounded-2xl bg-[#ffb703] p-5 text-[#071b3d] shadow-xl">
+              <span class="block font-[Poppins] text-3xl font-extrabold">38% Off</span>
+              <span class="mt-1 block text-sm font-semibold">for new customers</span>
+            </div>
+          </div>
+          <div class="relative p-8 sm:p-12 lg:order-2 lg:p-14">
+            <div class="section-kicker">One time / recurring</div>
+            <h2 class="mt-4 font-[Poppins] text-3xl font-extrabold text-[#071b3d] sm:text-4xl">Commercial Cleaning</h2>
+            <p class="mt-5 max-w-xl leading-7">Maintain a polished, healthy workplace with flexible service windows and dependable quality checks.</p>
+            <div class="mt-8 grid grid-cols-2 gap-x-5 gap-y-4 text-sm font-medium text-[#172443]">
+              <span class="check-line">Offices</span><span class="check-line">Shops</span>
+              <span class="check-line">Medical spaces</span><span class="check-line">Factories</span>
+              <span class="check-line">Restaurants</span><span class="check-line">Airports</span>
+              <span class="check-line">Public facilities</span><span class="check-line">Showrooms</span>
+            </div>
+            <a href="#estimate" class="primary-button mt-9">Free estimate <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Services -->
+    <section id="services" class="relative overflow-hidden py-24 lg:py-32">
+      <div class="absolute right-0 top-0 h-full w-[38%] bg-[#f7f9fd]"></div>
+      <div class="relative mx-auto max-w-[1180px] px-5">
+        <div class="reveal grid gap-10 lg:grid-cols-[.8fr_1.2fr] lg:gap-16">
+          <div class="lg:sticky lg:top-32 lg:self-start">
+            <div class="section-kicker">What we do</div>
+            <h2 class="section-title mt-4">Our most popular cleaning services for you</h2>
+            <p class="mt-6 leading-7">From routine upkeep to focused deep cleans, our teams bring the right equipment and process for every surface.</p>
+            <a href="#estimate" class="primary-button mt-8">Explore all services <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></a>
+          </div>
+
+          <div class="grid gap-6 sm:grid-cols-2">
+            <article class="service-card">
+              <span class="service-icon"><svg><use href="#i-house"></use></svg></span>
+              <h3>House Cleaning</h3>
+              <p>Detailed recurring care for bedrooms, living spaces, entryways, and shared areas.</p>
+              <a href="#estimate">Read more <svg><use href="#i-arrow-right"></use></svg></a>
+            </article>
+            <article class="service-card">
+              <span class="service-icon"><svg><use href="#i-kitchen"></use></svg></span>
+              <h3>Kitchen Cleaning</h3>
+              <p>Degreasing, appliance exteriors, counters, sinks, cabinet fronts, and floors.</p>
+              <a href="#estimate">Read more <svg><use href="#i-arrow-right"></use></svg></a>
+            </article>
+            <article class="service-card">
+              <span class="service-icon"><svg><use href="#i-building"></use></svg></span>
+              <h3>Office Cleaning</h3>
+              <p>Reliable workplace cleaning before, during, or after business hours.</p>
+              <a href="#estimate">Read more <svg><use href="#i-arrow-right"></use></svg></a>
+            </article>
+            <article class="service-card">
+              <span class="service-icon"><svg><use href="#i-window"></use></svg></span>
+              <h3>Window Cleaning</h3>
+              <p>Streak-free interior glass, frames, ledges, and accessible exterior panes.</p>
+              <a href="#estimate">Read more <svg><use href="#i-arrow-right"></use></svg></a>
+            </article>
+            <article class="service-card">
+              <span class="service-icon"><svg><use href="#i-sofa"></use></svg></span>
+              <h3>Upholstery Cleaning</h3>
+              <p>Careful extraction cleaning for sofas, chairs, ottomans, and fabric surfaces.</p>
+              <a href="#estimate">Read more <svg><use href="#i-arrow-right"></use></svg></a>
+            </article>
+            <article class="service-card">
+              <span class="service-icon"><svg><use href="#i-carpet"></use></svg></span>
+              <h3>Carpet Cleaning</h3>
+              <p>Deep fiber treatment that targets traffic marks, dust, and trapped odors.</p>
+              <a href="#estimate">Read more <svg><use href="#i-arrow-right"></use></svg></a>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <section class="relative overflow-hidden bg-[#0c349b] py-20 text-white">
+      <div class="absolute -left-20 -top-24 h-72 w-72 rounded-full border-[60px] border-white/5"></div>
+      <div class="absolute -bottom-32 right-0 h-80 w-80 rounded-full border-[70px] border-[#ffb703]/10"></div>
+      <div class="reveal relative mx-auto grid max-w-[1040px] gap-10 px-5 text-center sm:grid-cols-3">
+        <div class="stat-item">
+          <span class="counter font-[Poppins] text-5xl font-extrabold sm:text-6xl" data-target="1267">0</span><span class="align-top font-[Poppins] text-3xl font-bold text-[#ffb703]">+</span>
+          <p class="mt-3 text-sm font-bold uppercase tracking-[0.14em] text-white/75">Orders completed</p>
+        </div>
+        <div class="stat-item sm:border-x sm:border-white/15">
+          <span class="counter font-[Poppins] text-5xl font-extrabold sm:text-6xl" data-target="846">0</span><span class="align-top font-[Poppins] text-3xl font-bold text-[#ffb703]">+</span>
+          <p class="mt-3 text-sm font-bold uppercase tracking-[0.14em] text-white/75">Trusted clients</p>
+        </div>
+        <div class="stat-item">
+          <span class="counter font-[Poppins] text-5xl font-extrabold sm:text-6xl" data-target="36">0</span><span class="align-top font-[Poppins] text-3xl font-bold text-[#ffb703]">+</span>
+          <p class="mt-3 text-sm font-bold uppercase tracking-[0.14em] text-white/75">Years of experience</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Process -->
+    <section id="process" class="bg-[#f7f9fd] py-24 lg:py-32">
+      <div class="mx-auto max-w-[1180px] px-5">
+        <div class="reveal mx-auto max-w-2xl text-center">
+          <div class="section-kicker justify-center before:hidden">Work process</div>
+          <h2 class="section-title mt-4">How it works</h2>
+          <p class="mt-5 leading-7">A simple three-step process makes it easy to get a dependable cleaner exactly when you need one.</p>
+        </div>
+
+        <div class="reveal process-grid relative mt-16 grid gap-10 md:grid-cols-3">
+          <div class="process-card">
+            <div class="process-visual bg-[#eaf0ff] text-[#1040b6]"><svg><use href="#i-calendar"></use></svg><span>01</span></div>
+            <h3>Book online form</h3>
+            <p>Tell us about the property, service, preferred day, and any special requests.</p>
+          </div>
+          <div class="process-card">
+            <div class="process-visual bg-[#fff4ca] text-[#d89100]"><svg><use href="#i-user"></use></svg><span>02</span></div>
+            <h3>Get an expert cleaner</h3>
+            <p>We match the job with a trained, background-checked member of our team.</p>
+          </div>
+          <div class="process-card">
+            <div class="process-visual bg-[#eaf0ff] text-[#1040b6]"><svg><use href="#i-smile"></use></svg><span>03</span></div>
+            <h3>Relax &amp; enjoy</h3>
+            <p>We complete the checklist and leave your space fresh, tidy, and ready to enjoy.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Estimate -->
+    <section id="estimate" class="relative overflow-hidden py-24 lg:py-32">
+      <div class="absolute inset-y-0 left-0 w-full bg-[#0d3aa4] lg:w-[46%]"></div>
+      <div class="relative mx-auto grid max-w-[1180px] items-center gap-12 px-5 lg:grid-cols-[.9fr_1.1fr]">
+        <div class="reveal relative min-h-[430px] text-white">
+          <span class="absolute left-0 top-8 h-48 w-48 rounded-full border-[38px] border-white/5"></span>
+          <div class="relative max-w-lg pt-4 lg:pr-12">
+            <div class="section-kicker text-[#ffcc38] before:bg-[#ffb703]">Free estimate</div>
+            <h2 class="mt-4 font-[Poppins] text-4xl font-extrabold leading-tight sm:text-5xl">Get a quick response within 24 hours</h2>
+            <p class="mt-6 leading-7 text-white/75">Share a few details and our team will prepare a clear, no-obligation estimate for your cleaning needs.</p>
+            <div class="mt-9 flex items-center gap-4">
+              <span class="grid h-16 w-16 place-items-center rounded-full bg-[#ffb703] text-[#071b3d]"><svg class="h-7 w-7"><use href="#i-phone"></use></svg></span>
+              <span><span class="block text-sm text-white/70">Call for immediate help</span><a href="tel:+442073284499" class="font-[Poppins] text-xl font-bold hover:text-[#ffb703]">+44 20 7328 4499</a></span>
+            </div>
+          </div>
+        </div>
+
+        <form id="estimate-form" class="reveal rounded-[26px] bg-white p-7 shadow-2xl shadow-blue-950/15 sm:p-10 lg:p-12" novalidate>
+          <div class="grid gap-5 sm:grid-cols-2">
+            <label class="field-label">Your name
+              <input name="name" type="text" required placeholder="Full name" class="form-field" />
+            </label>
+            <label class="field-label">Email address
+              <input name="email" type="email" required placeholder="name@example.com" class="form-field" />
+            </label>
+            <label class="field-label">Phone number
+              <input name="phone" type="tel" required placeholder="+44 000 000 000" class="form-field" />
+            </label>
+            <label class="field-label">Choose service
+              <select name="service" required class="form-field appearance-none">
+                <option value="">Select service</option>
+                <option>Residential cleaning</option>
+                <option>Commercial cleaning</option>
+                <option>Window cleaning</option>
+                <option>Carpet cleaning</option>
+              </select>
+            </label>
+          </div>
+          <label class="field-label mt-5">Tell us about your space
+            <textarea name="message" rows="4" placeholder="Bedrooms, square footage, preferred date…" class="form-field resize-none"></textarea>
+          </label>
+          <label class="mt-5 flex items-start gap-3 text-sm leading-6">
+            <input type="checkbox" required class="mt-1 h-4 w-4 accent-[#1040b6]" />
+            <span>I agree to be contacted about this estimate.</span>
+          </label>
+          <button class="primary-button mt-7 w-full justify-center py-4" type="submit">Get estimate <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Projects -->
+    <section id="projects" class="bg-[#f7f9fd] py-24 lg:py-32">
+      <div class="mx-auto max-w-[1180px] px-5">
+        <div class="reveal flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
+          <div class="max-w-2xl">
+            <div class="section-kicker">Successful projects</div>
+            <h2 class="section-title mt-4">Keep your vision to our latest projects</h2>
+          </div>
+          <div class="flex gap-3">
+            <button id="projects-prev" class="carousel-button" aria-label="Previous projects"><svg><use href="#i-chevron-left"></use></svg></button>
+            <button id="projects-next" class="carousel-button" aria-label="Next projects"><svg><use href="#i-chevron-right"></use></svg></button>
+          </div>
+        </div>
+
+        <div id="projects-track" class="reveal no-scrollbar mt-12 flex snap-x snap-mandatory gap-6 overflow-x-auto pb-4">
+          <article class="project-card">
+            <img src="https://images.unsplash.com/photo-1686178827149-6d55c72d81df?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8Y2xlYW5pbmclMjBzZXJ2aWNlc3xlbnwwfHwwfHx8MA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Furniture deep cleaning" />
+            <div><span>House, office</span><h3>Furniture Cleaning</h3></div>
+          </article>
+          <article class="project-card">
+            <img src="https://images.unsplash.com/photo-1642505172378-a6f5e5b15580?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fGNsZWFuaW5nJTIwc2VydmljZXN8ZW58MHx8MHx8fDA%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Kitchen cleaning" />
+            <div><span>Apartment</span><h3>Kitchen Cleaning</h3></div>
+          </article>
+          <article class="project-card">
+            <img src="https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8Y2xlYW5pbmclMjBzZXJ2aWNlc3xlbnwwfHwwfHx8MA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Sanitizing spray" />
+            <div><span>Residential, office</span><h3>Surface Sanitizing</h3></div>
+          </article>
+          <article class="project-card">
+            <img src="https://images.unsplash.com/photo-1740657254989-42fe9c3b8cce?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Y2xlYW5pbmclMjBzZXJ2aWNlc3xlbnwwfHwwfHx8MA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Commercial floor cleaning" />
+            <div><span>Commercial</span><h3>Floor Cleaning</h3></div>
+          </article>
+          <article class="project-card">
+            <img src="https://images.unsplash.com/photo-1647381518264-97ff1835026f?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjB8fGNsZWFuaW5nJTIwc2VydmljZXN8ZW58MHx8MHx8fDA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Home cleaning" />
+            <div><span>Home, apartment</span><h3>Move-out Cleaning</h3></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing -->
+    <section id="pricing" class="relative overflow-hidden py-24 lg:py-32">
+      <div class="absolute left-1/2 top-0 h-72 w-72 -translate-x-1/2 rounded-full bg-[#f3f7ff] blur-3xl"></div>
+      <div class="relative mx-auto max-w-[1180px] px-5">
+        <div class="reveal mx-auto max-w-3xl text-center">
+          <div class="section-kicker justify-center before:hidden">Cleaning plans</div>
+          <h2 class="section-title mt-4">Take a look at our pricing and select your choice</h2>
+        </div>
+
+        <div class="reveal mt-14 grid items-stretch gap-7 lg:grid-cols-3">
+          <article class="price-card">
+            <h3>Residential</h3>
+            <div class="mt-6 flex items-end gap-1"><span class="pb-2 font-[Poppins] text-xl font-bold text-[#1040b6]">$</span><span class="font-[Poppins] text-6xl font-extrabold text-[#071b3d]">20</span><span class="pb-2 text-sm">/ visit</span></div>
+            <p class="mt-2 text-sm font-semibold uppercase tracking-[0.12em] text-[#8b94a5]">For homes</p>
+            <ul class="mt-8 space-y-4">
+              <li class="check-line">Professional cleaner</li><li class="check-line">Two bedrooms</li><li class="check-line">Kitchen cleaning</li><li class="check-line">Two bathrooms</li><li class="check-line">Floor care</li>
+            </ul>
+            <a href="#estimate" class="outline-button mt-9">Book now <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></a>
+          </article>
+
+          <article class="price-card featured">
+            <span class="featured-label">Most popular</span>
+            <h3>Commercial</h3>
+            <div class="mt-6 flex items-end gap-1"><span class="pb-2 font-[Poppins] text-xl font-bold text-[#ffb703]">$</span><span class="font-[Poppins] text-6xl font-extrabold text-white">36</span><span class="pb-2 text-sm text-white/65">/ visit</span></div>
+            <p class="mt-2 text-sm font-semibold uppercase tracking-[0.12em] text-white/60">For business</p>
+            <ul class="mt-8 space-y-4">
+              <li class="check-line-light">Professional cleaner</li><li class="check-line-light">Window cleaning</li><li class="check-line-light">Kitchen / breakroom</li><li class="check-line-light">Bathroom cleaning</li><li class="check-line-light">Floor care</li>
+            </ul>
+            <a href="#estimate" class="mt-9 inline-flex items-center gap-3 rounded-md bg-[#ffb703] px-6 py-3.5 text-sm font-bold uppercase tracking-[0.06em] text-[#071b3d] transition hover:bg-white">Book now <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></a>
+          </article>
+
+          <article class="price-card">
+            <h3>Resort</h3>
+            <div class="mt-6 flex items-end gap-1"><span class="pb-2 font-[Poppins] text-xl font-bold text-[#1040b6]">$</span><span class="font-[Poppins] text-6xl font-extrabold text-[#071b3d]">49</span><span class="pb-2 text-sm">/ visit</span></div>
+            <p class="mt-2 text-sm font-semibold uppercase tracking-[0.12em] text-[#8b94a5]">For strata</p>
+            <ul class="mt-8 space-y-4">
+              <li class="check-line">Professional cleaner</li><li class="check-line">Living areas</li><li class="check-line">Kitchen cleaning</li><li class="check-line">Bathroom cleaning</li><li class="check-line">Common spaces</li>
+            </ul>
+            <a href="#estimate" class="outline-button mt-9">Book now <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section id="testimonials" class="relative overflow-hidden bg-[#0c349b] py-24 text-white lg:py-32">
+      <div class="absolute -right-28 top-1/2 h-96 w-96 -translate-y-1/2 rounded-full border-[75px] border-white/5"></div>
+      <div class="relative mx-auto grid max-w-[1180px] items-center gap-14 px-5 lg:grid-cols-[.9fr_1.1fr]">
+        <div class="reveal relative mx-auto w-full max-w-[500px] pb-10 pr-8">
+          <div class="overflow-hidden rounded-[28px] border-[10px] border-white/10">
+            <img class="h-[520px] w-full object-cover" src="https://images.unsplash.com/photo-1647381518264-97ff1835026f?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjB8fGNsZWFuaW5nJTIwc2VydmljZXN8ZW58MHx8MHx8fDA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Professional cleaner in a bright kitchen" />
+          </div>
+          <div class="absolute bottom-0 right-0 grid h-28 w-28 place-items-center rounded-2xl bg-[#ffb703] text-[#071b3d] shadow-xl"><svg class="h-12 w-12"><use href="#i-quote"></use></svg></div>
+        </div>
+
+        <div class="reveal">
+          <div class="section-kicker text-[#ffcc38] before:bg-[#ffb703]">Testimonials</div>
+          <h2 class="mt-4 font-[Poppins] text-4xl font-extrabold leading-tight sm:text-5xl">What clients say about us</h2>
+          <div class="relative mt-9 min-h-[280px]">
+            <article class="testimonial-slide is-active" data-testimonial="0">
+              <p class="font-[Poppins] text-lg leading-9 text-white/85 sm:text-xl">“The team arrived on time, worked carefully around our furniture, and left the whole house noticeably fresher. Booking was easy and the result was consistent from room to room.”</p>
+              <div class="mt-8 flex items-center gap-4">
+                <span class="grid h-14 w-14 place-items-center rounded-full bg-white/10 font-[Poppins] text-lg font-bold">MP</span>
+                <span><strong class="block font-[Poppins] text-lg">Mulias Prosva</strong><small class="mt-1 block text-white/60">Homeowner</small></span>
+              </div>
+            </article>
+            <article class="testimonial-slide" data-testimonial="1">
+              <p class="font-[Poppins] text-lg leading-9 text-white/85 sm:text-xl">“Our office has a lot of glass and high-traffic floors. Cleanu built a practical evening schedule and their supervisors follow up quickly whenever we need an adjustment.”</p>
+              <div class="mt-8 flex items-center gap-4">
+                <span class="grid h-14 w-14 place-items-center rounded-full bg-white/10 font-[Poppins] text-lg font-bold">JD</span>
+                <span><strong class="block font-[Poppins] text-lg">James Dalton</strong><small class="mt-1 block text-white/60">Operations manager</small></span>
+              </div>
+            </article>
+            <article class="testimonial-slide" data-testimonial="2">
+              <p class="font-[Poppins] text-lg leading-9 text-white/85 sm:text-xl">“We used the move-out service and received our full deposit back. The kitchen and bathrooms looked excellent, and the estimate matched the final price.”</p>
+              <div class="mt-8 flex items-center gap-4">
+                <span class="grid h-14 w-14 place-items-center rounded-full bg-white/10 font-[Poppins] text-lg font-bold">SA</span>
+                <span><strong class="block font-[Poppins] text-lg">Sofia Allen</strong><small class="mt-1 block text-white/60">Tenant</small></span>
+              </div>
+            </article>
+          </div>
+          <div class="mt-7 flex items-center gap-3">
+            <button id="testimonial-prev" class="grid h-12 w-12 place-items-center rounded-full border border-white/20 transition hover:border-[#ffb703] hover:bg-[#ffb703] hover:text-[#071b3d]" aria-label="Previous testimonial"><svg class="h-5 w-5"><use href="#i-chevron-left"></use></svg></button>
+            <button id="testimonial-next" class="grid h-12 w-12 place-items-center rounded-full border border-white/20 transition hover:border-[#ffb703] hover:bg-[#ffb703] hover:text-[#071b3d]" aria-label="Next testimonial"><svg class="h-5 w-5"><use href="#i-chevron-right"></use></svg></button>
+            <div class="ml-3 flex gap-2">
+              <button class="testimonial-dot is-active" data-testimonial-dot="0" aria-label="Show testimonial 1"></button>
+              <button class="testimonial-dot" data-testimonial-dot="1" aria-label="Show testimonial 2"></button>
+              <button class="testimonial-dot" data-testimonial-dot="2" aria-label="Show testimonial 3"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Blog -->
+    <section id="blog" class="py-24 lg:py-32">
+      <div class="mx-auto max-w-[1180px] px-5">
+        <div class="reveal flex flex-col justify-between gap-7 sm:flex-row sm:items-end">
+          <div>
+            <div class="section-kicker">From the blog</div>
+            <h2 class="section-title mt-4">Latest news &amp; articles</h2>
+          </div>
+          <a href="#" class="outline-button">View all posts <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></a>
+        </div>
+
+        <div class="reveal mt-12 grid gap-8 lg:grid-cols-3">
+          <article class="blog-card">
+            <div class="relative overflow-hidden"><img src="https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8Y2xlYW5pbmclMjBzZXJ2aWNlc3xlbnwwfHwwfHx8MA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Colorful cleaning spray bottle" /><span class="blog-date"><strong>21</strong> Jul</span></div>
+            <div class="p-7"><div class="blog-meta"><span>By John Baus</span><span>Agency</span></div><h3><a href="#">A practical weekly checklist for a consistently clean home</a></h3><p>Build a light routine that prevents dust and clutter from becoming a bigger weekend project.</p><a class="blog-more" href="#">Read more <svg><use href="#i-arrow-right"></use></svg></a></div>
+          </article>
+          <article class="blog-card">
+            <div class="relative overflow-hidden"><img src="https://images.unsplash.com/photo-1686178827149-6d55c72d81df?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8Y2xlYW5pbmclMjBzZXJ2aWNlc3xlbnwwfHwwfHx8MA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Upholstery cleaning equipment" /><span class="blog-date"><strong>18</strong> Aug</span></div>
+            <div class="p-7"><div class="blog-meta"><span>By Monus Botha</span><span>Guides</span></div><h3><a href="#">When professional upholstery cleaning makes a difference</a></h3><p>Learn which fabric problems can be treated safely and how to prepare furniture before a visit.</p><a class="blog-more" href="#">Read more <svg><use href="#i-arrow-right"></use></svg></a></div>
+          </article>
+          <article class="blog-card">
+            <div class="relative overflow-hidden"><img src="https://images.unsplash.com/photo-1740657254989-42fe9c3b8cce?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Y2xlYW5pbmclMjBzZXJ2aWNlc3xlbnwwfHwwfHx8MA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=60&amp;w=3000" alt="Professional floor cleaning" /><span class="blog-date"><strong>15</strong> Sep</span></div>
+            <div class="p-7"><div class="blog-meta"><span>By Mills Paul</span><span>Commercial</span></div><h3><a href="#">How cleaner workplaces support a better customer experience</a></h3><p>High-touch surfaces, entry areas, and washrooms shape how visitors perceive a business.</p><a class="blog-more" href="#">Read more <svg><use href="#i-arrow-right"></use></svg></a></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section id="contact" class="relative z-10 -mb-20 px-5">
+      <div class="reveal mx-auto flex max-w-[1180px] flex-col items-start justify-between gap-8 overflow-hidden rounded-[24px] bg-[#ffb703] px-8 py-10 text-[#071b3d] shadow-2xl shadow-blue-950/15 sm:px-12 lg:flex-row lg:items-center lg:px-16">
+        <div class="relative max-w-2xl">
+          <svg class="absolute -left-10 -top-8 h-20 w-20 text-white/35"><use href="#i-sparkles"></use></svg>
+          <span class="relative text-sm font-bold uppercase tracking-[0.14em]">Ready for a cleaner space?</span>
+          <h2 class="relative mt-2 font-[Poppins] text-3xl font-extrabold leading-tight sm:text-4xl">Book a trusted cleaning team today.</h2>
+        </div>
+        <a href="#estimate" class="inline-flex flex-none items-center gap-3 rounded-md bg-[#1040b6] px-7 py-4 text-sm font-bold uppercase tracking-[0.06em] text-white transition hover:-translate-y-1 hover:bg-[#071b3d]">Get free estimate <svg class="h-4 w-4"><use href="#i-arrow-right"></use></svg></a>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-[#071b3d] pb-8 pt-36 text-[#aab4c7]">
+    <div class="mx-auto grid max-w-[1180px] gap-12 px-5 pb-14 sm:grid-cols-2 lg:grid-cols-[1.25fr_.75fr_.75fr_1.15fr]">
+      <div>
+        <a href="#home" class="inline-flex items-center gap-3">
+          <span class="grid h-12 w-12 place-items-center rounded-xl bg-[#1040b6] text-[#ffb703]"><svg class="h-7 w-7"><use href="#i-house"></use></svg></span>
+          <span><span class="block font-[Poppins] text-2xl font-extrabold leading-none text-white">Cleanu</span><span class="mt-1 block text-[9px] font-bold uppercase tracking-[0.22em] text-white/50">Cleaning Service</span></span>
+        </a>
+        <p class="mt-6 max-w-sm leading-7">Professional cleaning plans for homes, offices, hospitality spaces, and managed properties.</p>
+        <div class="mt-6 flex gap-3">
+          <a href="#" aria-label="Facebook" class="footer-social"><svg><use href="#i-facebook"></use></svg></a>
+          <a href="#" aria-label="Twitter" class="footer-social"><svg><use href="#i-twitter"></use></svg></a>
+          <a href="#" aria-label="LinkedIn" class="footer-social"><svg><use href="#i-linkedin"></use></svg></a>
+          <a href="#" aria-label="Instagram" class="footer-social"><svg><use href="#i-instagram"></use></svg></a>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="footer-title">Quick links</h3>
+        <ul class="footer-links"><li><a href="#home">Home</a></li><li><a href="#about">About us</a></li><li><a href="#process">How it works</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#blog">Blog</a></li></ul>
+      </div>
+      <div>
+        <h3 class="footer-title">Services</h3>
+        <ul class="footer-links"><li><a href="#services">House cleaning</a></li><li><a href="#services">Carpet care</a></li><li><a href="#services">Window cleaning</a></li><li><a href="#services">Commercial</a></li><li><a href="#services">Sanitizing</a></li></ul>
+      </div>
+      <div>
+        <h3 class="footer-title">Contact info</h3>
+        <ul class="mt-6 space-y-5">
+          <li class="flex gap-3"><svg class="mt-1 h-5 w-5 flex-none text-[#ffb703]"><use href="#i-location"></use></svg><span>5919 Trussville Crossings Pkwy, Dusting Town, Austria</span></li>
+          <li class="flex gap-3"><svg class="mt-1 h-5 w-5 flex-none text-[#ffb703]"><use href="#i-clock"></use></svg><span>Opening hours: 8:00 AM – 7:45 PM</span></li>
+          <li class="flex gap-3"><svg class="mt-1 h-5 w-5 flex-none text-[#ffb703]"><use href="#i-phone"></use></svg><a href="tel:+12334598768" class="transition hover:text-white">+123 345 98768</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="border-t border-white/10">
+      <div class="mx-auto flex max-w-[1180px] flex-col gap-4 px-5 pt-7 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <p>© <span id="current-year"></span> Cleanu. Clean-room Tailwind recreation.</p>
+        <div class="flex gap-6"><a href="#" class="transition hover:text-white">Terms</a><a href="#" class="transition hover:text-white">Privacy</a><a href="#" class="transition hover:text-white">Support</a></div>
+      </div>
+    </div>
+  </footer>
+
+  <button id="back-to-top" class="fixed bottom-6 right-6 z-50 grid h-12 w-12 translate-y-6 place-items-center rounded-full bg-[#1040b6] text-white opacity-0 shadow-xl transition duration-300 hover:bg-[#ffb703] hover:text-[#071b3d]" aria-label="Back to top">
+    <svg class="h-5 w-5"><use href="#i-arrow-up"></use></svg>
+  </button>
+
+  <script src="assets/js/main.js"></script>
+</body>
+</html>

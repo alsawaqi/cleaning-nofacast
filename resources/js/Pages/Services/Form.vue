@@ -51,6 +51,7 @@ type PackageForm = {
     vat_rate: number;
     prices_include_vat: boolean;
     checklist_text: string;
+    sla_kpi_text: string;
     is_active: boolean;
 };
 
@@ -87,6 +88,7 @@ type ServiceForm = {
     allowed_frequencies: string[];
     required_certificates: string[];
     checklist_text: string;
+    sla_kpi_text: string;
     is_active: boolean;
     packages: PackageForm[];
     pricing_rules: PricingRuleForm[];
@@ -121,6 +123,7 @@ const stepFields: Record<Step['key'], string[]> = {
         'allowed_frequencies',
         'required_certificates',
         'checklist_template',
+        'sla_kpi_template',
     ],
     packages: ['packages'],
     pricing_rules: ['pricing_rules'],
@@ -142,6 +145,7 @@ function blankPackage(): PackageForm {
         vat_rate: 15,
         prices_include_vat: false,
         checklist_text: '',
+        sla_kpi_text: '',
         is_active: true,
     };
 }
@@ -173,6 +177,33 @@ function checklistFromText(text: string): Array<{ label: string; is_required: bo
         .map((label) => ({ label, is_required: true }));
 }
 
+function slaKpiText(items: Array<{ code: string; label: string; target: number; unit: string; weight: number; direction: string }> | undefined): string {
+    return (items ?? [])
+        .map((item) => [item.label, item.target, item.unit || 'percent', item.weight || 0, item.direction || 'at_least', item.code].join(' | '))
+        .join('\n');
+}
+
+function slaKpiFromText(text: string): Array<{ code: string; label: string; target: number; unit: string; weight: number; direction: string }> {
+    return text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .map((line) => {
+            const [label = '', target = '0', unit = 'percent', weight = '0', direction = 'at_least', code = ''] = line
+                .split('|')
+                .map((part) => part.trim());
+
+            return {
+                code,
+                label,
+                target: Number(target || 0),
+                unit: unit || 'percent',
+                weight: Number(weight || 0),
+                direction: direction === 'at_most' ? 'at_most' : 'at_least',
+            };
+        });
+}
+
 function splitList(text: string): string[] {
     return text
         .split(/[,\n]/)
@@ -196,6 +227,7 @@ function packageToForm(item: ServicePackage): PackageForm {
         vat_rate: item.vat_rate,
         prices_include_vat: item.prices_include_vat,
         checklist_text: checklistText(item.checklist_template),
+        sla_kpi_text: slaKpiText(item.sla_kpi_template),
         is_active: item.is_active,
     };
 }
@@ -237,6 +269,7 @@ function defaultFormData(): ServiceForm {
             allowed_frequencies: props.service.allowed_frequencies ?? [],
             required_certificates: props.service.required_certificates ?? [],
             checklist_text: checklistText(props.service.checklist_template),
+            sla_kpi_text: slaKpiText(props.service.sla_kpi_template),
             is_active: props.service.is_active,
             packages: props.service.packages?.length ? props.service.packages.map(packageToForm) : [blankPackage()],
             pricing_rules: props.service.pricing_rules?.length ? props.service.pricing_rules.map(ruleToForm) : [blankRule()],
@@ -263,6 +296,7 @@ function defaultFormData(): ServiceForm {
         allowed_frequencies: ['once'],
         required_certificates: [],
         checklist_text: '',
+        sla_kpi_text: '',
         is_active: true,
         packages: [blankPackage()],
         pricing_rules: [blankRule()],
@@ -355,6 +389,7 @@ function buildPayload(data: ServiceForm) {
         allowed_frequencies: data.allowed_frequencies,
         required_certificates: data.required_certificates,
         checklist_template: checklistFromText(data.checklist_text),
+        sla_kpi_template: slaKpiFromText(data.sla_kpi_text),
         is_active: data.is_active,
         packages: data.packages
             .filter((item) => item.name.trim().length > 0)
@@ -373,6 +408,7 @@ function buildPayload(data: ServiceForm) {
                 vat_rate: Number(item.vat_rate || 0),
                 prices_include_vat: item.prices_include_vat,
                 checklist_template: checklistFromText(item.checklist_text),
+                sla_kpi_template: slaKpiFromText(item.sla_kpi_text),
                 is_active: item.is_active,
             })),
         pricing_rules: data.pricing_rules
@@ -616,6 +652,11 @@ function submit(): void {
                     <span class="mb-1.5 block text-sm font-medium text-gray-700">{{ t('servicesAdmin.checklist', 'Checklist') }}</span>
                     <textarea v-model="form.checklist_text" class="ta-input min-h-28 w-full px-4 py-3 text-sm" />
                 </label>
+
+                <label class="block">
+                    <span class="mb-1.5 block text-sm font-medium text-gray-700">{{ t('servicesAdmin.slaKpiTemplate', 'SLA/KPI template') }}</span>
+                    <textarea v-model="form.sla_kpi_text" class="ta-input min-h-28 w-full px-4 py-3 text-sm" placeholder="Attendance | 95 | percent | 40 | at_least | attendance" />
+                </label>
             </div>
 
             <div v-else-if="currentStepKey === 'packages'" class="space-y-4">
@@ -699,6 +740,11 @@ function submit(): void {
                     <label class="block">
                         <span class="mb-1.5 block text-sm font-medium text-gray-700">{{ t('servicesAdmin.packageChecklist', 'Package checklist') }}</span>
                         <textarea v-model="item.checklist_text" class="ta-input min-h-20 w-full px-4 py-3 text-sm" />
+                    </label>
+
+                    <label class="block">
+                        <span class="mb-1.5 block text-sm font-medium text-gray-700">{{ t('servicesAdmin.packageSlaKpiTemplate', 'Package SLA/KPI template') }}</span>
+                        <textarea v-model="item.sla_kpi_text" class="ta-input min-h-20 w-full px-4 py-3 text-sm" placeholder="Checklist completion | 90 | percent | 30 | at_least | checklist_completion" />
                     </label>
 
                     <div class="grid gap-3 sm:grid-cols-2">

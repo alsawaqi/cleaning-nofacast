@@ -23,6 +23,8 @@ class Assignment extends Model
         'ends_at',
         'share_percent',
         'status',
+        'team_role',
+        'task_instructions',
     ];
 
     protected function casts(): array
@@ -30,6 +32,7 @@ class Assignment extends Model
         return [
             'weekday' => 'integer',
             'share_percent' => 'integer',
+            'task_instructions' => 'array',
         ];
     }
 

@@ -45,6 +45,7 @@ class ContractFactory extends Factory
             'overtime_policy' => 'none',
             'service_scope' => [],
             'terms_and_conditions' => null,
+            'sla_kpi_template' => [],
             'payment_plan' => [
                 ['day' => 1, 'percent' => 50],
                 ['day' => 15, 'percent' => 50],

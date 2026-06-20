@@ -32,6 +32,7 @@ class ServicePackageFactory extends Factory
                 ['label' => 'Site arrival photo', 'is_required' => true],
                 ['label' => 'Supervisor completion note', 'is_required' => false],
             ],
+            'sla_kpi_template' => [],
             'is_active' => true,
         ];
     }

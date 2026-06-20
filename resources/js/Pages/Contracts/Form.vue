@@ -27,6 +27,7 @@ import type {
     ContractCustomerOption,
     PaymentPlanInstallment,
     Service,
+    SlaKpiTemplateItem,
     ServicePackageOption,
 } from '../../types';
 
@@ -76,6 +77,7 @@ type ReviewLine = {
 };
 
 type ContractForm = {
+    booking_request_id: number | null;
     customer_id: number | null;
     customer_site_id: number | null;
     service_id: number | null;
@@ -100,6 +102,7 @@ type ContractForm = {
     overtime_policy: string;
     service_scope: ScopeForm[];
     terms_and_conditions: string;
+    sla_kpi_template: SlaKpiTemplateItem[];
     payment_plan: PaymentPlanForm[];
     notice_days: number;
     auto_renews: boolean;
@@ -108,9 +111,12 @@ type ContractForm = {
     addendums: AddendumForm[];
 };
 
+type ContractInitialForm = Partial<ContractForm>;
+
 const props = defineProps<{
     mode: 'create' | 'edit';
     contract: Contract | null;
+    initialForm?: ContractInitialForm | null;
     customers: ContractCustomerOption[];
     serviceOptions: Service[];
     servicePackages: ServicePackageOption[];
@@ -268,6 +274,14 @@ function scopeFromService(item: Service | null | undefined): ScopeForm[] {
     }];
 }
 
+function inheritedSlaKpiTemplate(service: Service | null | undefined, servicePackage: ServicePackageOption | null | undefined): SlaKpiTemplateItem[] {
+    if (servicePackage?.sla_kpi_template?.length) {
+        return servicePackage.sla_kpi_template;
+    }
+
+    return service?.sla_kpi_template ?? [];
+}
+
 function sarToHalalas(value: string | number | null | undefined): number {
     const parsed = Number(String(value ?? '0').replace(/[^\d.]/g, ''));
 
@@ -288,6 +302,7 @@ function defaultFormData(): ContractForm {
 
     if (props.contract) {
         return {
+            booking_request_id: null,
             customer_id: props.contract.customer_id,
             customer_site_id: props.contract.customer_site_id,
             service_id: props.contract.service_id ?? null,
@@ -312,6 +327,7 @@ function defaultFormData(): ContractForm {
             overtime_policy: props.contract.overtime_policy ?? 'none',
             service_scope: props.contract.service_scope?.length ? props.contract.service_scope.map(scopeToForm) : [blankScope()],
             terms_and_conditions: props.contract.terms_and_conditions ?? '',
+            sla_kpi_template: props.contract.sla_kpi_template ?? [],
             payment_plan: props.contract.payment_plan.length ? props.contract.payment_plan.map(paymentPlanToForm) : [blankPaymentPlan()],
             notice_days: props.contract.notice_days,
             auto_renews: props.contract.auto_renews,
@@ -321,7 +337,8 @@ function defaultFormData(): ContractForm {
         };
     }
 
-    return {
+    return applyInitialForm({
+        booking_request_id: null,
         customer_id: props.customers[0]?.id ?? null,
         customer_site_id: props.customers[0]?.sites[0]?.id ?? null,
         service_id: firstPackage?.service_id ?? defaultService?.id ?? null,
@@ -346,6 +363,7 @@ function defaultFormData(): ContractForm {
         overtime_policy: defaultService?.overtime_policy ?? 'none',
         service_scope: scopeFromService(defaultService),
         terms_and_conditions: '',
+        sla_kpi_template: inheritedSlaKpiTemplate(defaultService, firstPackage),
         payment_plan: [
             { label: 'Advance', day: 1, percent: 50 },
             { label: 'Completion', day: 20, percent: 50 },
@@ -355,6 +373,21 @@ function defaultFormData(): ContractForm {
         billing_cycle: firstPackage?.billing_cycle ?? 'monthly',
         special_terms: '',
         addendums: [],
+    });
+}
+
+function applyInitialForm(base: ContractForm): ContractForm {
+    if (props.mode !== 'create' || ! props.initialForm) {
+        return base;
+    }
+
+    const initial = Object.fromEntries(
+        Object.entries(props.initialForm).filter(([, value]) => value !== undefined),
+    ) as ContractInitialForm;
+
+    return {
+        ...base,
+        ...initial,
     };
 }
 
@@ -368,7 +401,9 @@ const selectedCustomer = computed(() => props.customers.find((customer) => custo
 const availableSites = computed(() => selectedCustomer.value?.sites ?? []);
 const selectedSite = computed(() => availableSites.value.find((site) => site.id === form.customer_site_id) ?? null);
 const selectedService = computed(() => props.serviceOptions.find((item) => item.id === form.service_id) ?? null);
-const selectedServicePackage = computed(() => props.servicePackages.find((item) => item.id === form.service_package_id) ?? null);
+const packageServiceOptions = computed(() => props.serviceOptions.filter((service) => props.servicePackages.some((item) => item.service_id === service.id)));
+const availableServicePackages = computed(() => props.servicePackages.filter((item) => item.service_id === form.service_id));
+const selectedServicePackage = computed(() => availableServicePackages.value.find((item) => item.id === form.service_package_id) ?? null);
 const selectedPackageText = computed(() => selectedServicePackage.value ? packageLabel(selectedServicePackage.value) : '');
 const selectedServiceText = computed(() => selectedService.value?.title ?? '');
 const selectedSiteText = computed(() => selectedSite.value ? `${selectedSite.value.name} / ${selectedSite.value.city}` : '');
@@ -502,7 +537,7 @@ function catalogLabel(group: keyof Catalog, key: string): string {
 }
 
 function packageLabel(item: ServicePackageOption): string {
-    return `${item.service_title ?? t('contractsAdmin.service', 'Service')} / ${item.name}`;
+    return `${item.name} / ${money(item.price_halalas)} / ${catalogLabel('billingCycles', item.billing_cycle)}`;
 }
 
 function textDirection(value?: string | null): 'ltr' | 'rtl' {
@@ -526,6 +561,10 @@ function goToStep(index: number): void {
 
 function syncSiteForCustomer(): void {
     form.customer_site_id = availableSites.value[0]?.id ?? null;
+}
+
+function firstPackageForService(serviceId: number | null | undefined): ServicePackageOption | null {
+    return props.servicePackages.find((item) => item.service_id === serviceId) ?? null;
 }
 
 function applyPackageDefaults(): void {
@@ -553,6 +592,16 @@ function applyPackageDefaults(): void {
     form.extra_hour_rate_sar = service?.extra_hour_rate_sar ?? '0.00';
     form.overtime_policy = service?.overtime_policy ?? 'none';
     form.service_scope = scopeFromService(service);
+    form.sla_kpi_template = inheritedSlaKpiTemplate(service, selectedServicePackage.value);
+}
+
+function applyPackageServiceDefaults(): void {
+    const packageForService = firstPackageForService(form.service_id);
+    form.service_package_id = packageForService?.id ?? null;
+
+    if (packageForService) {
+        applyPackageDefaults();
+    }
 }
 
 function applyServiceDefaults(): void {
@@ -580,13 +629,17 @@ function applyServiceDefaults(): void {
     form.extra_hour_rate_sar = service.extra_hour_rate_sar ?? '0.00';
     form.overtime_policy = service.overtime_policy ?? 'none';
     form.service_scope = scopeFromService(service);
+    form.sla_kpi_template = inheritedSlaKpiTemplate(service, null);
 }
 
 function setAgreementSource(source: AgreementSource): void {
     form.pricing_source = source;
 
     if (source === 'package') {
-        form.service_package_id = selectedServicePackage.value?.id ?? props.servicePackages[0]?.id ?? null;
+        const packageForCurrentService = firstPackageForService(form.service_id);
+        const fallbackPackage = packageForCurrentService ?? props.servicePackages[0] ?? null;
+        form.service_id = fallbackPackage?.service_id ?? packageServiceOptions.value[0]?.id ?? form.service_id;
+        form.service_package_id = fallbackPackage?.id ?? null;
         applyPackageDefaults();
         return;
     }
@@ -662,6 +715,7 @@ function removeAddendum(index: number): void {
 
 function buildPayload(data: ContractForm) {
     return {
+        booking_request_id: data.booking_request_id,
         customer_id: data.customer_id,
         customer_site_id: data.customer_site_id,
         service_id: data.service_id,
@@ -690,6 +744,7 @@ function buildPayload(data: ContractForm) {
                 tasks: item.tasks,
             })),
         terms_and_conditions: data.terms_and_conditions,
+        sla_kpi_template: data.sla_kpi_template,
         payment_plan: data.payment_plan
             .filter((item) => Number(item.percent || 0) > 0)
             .map((item) => ({
@@ -821,7 +876,7 @@ function submit(): void {
                             type="button"
                             class="flex min-h-16 items-center gap-3 rounded-xl border px-4 py-3 text-start transition disabled:cursor-not-allowed disabled:opacity-50"
                             :class="form.pricing_source === 'package' ? 'border-brand-500 bg-brand-50 text-brand-700 shadow-theme-xs' : 'border-gray-200 bg-white text-gray-700 hover:border-brand-200'"
-                            :disabled="servicePackages.length === 0"
+                            :disabled="packageServiceOptions.length === 0"
                             @click="setAgreementSource('package')"
                         >
                             <PackageCheck class="h-5 w-5 shrink-0" />
@@ -846,15 +901,30 @@ function submit(): void {
                     </div>
                 </div>
 
-                <label v-if="form.pricing_source === 'package'" class="block sm:col-span-2">
-                    <span class="mb-1.5 block text-sm font-medium text-gray-700">{{ t('contractsAdmin.package', 'Package') }}</span>
-                    <select v-model.number="form.service_package_id" class="ta-input h-11 w-full px-4 text-sm" :dir="textDirection(selectedPackageText)" @change="applyPackageDefaults">
-                        <option v-for="item in servicePackages" :key="item.id" :value="item.id" :dir="textDirection(packageLabel(item))">
-                            {{ packageLabel(item) }}
-                        </option>
-                    </select>
-                    <span v-if="form.errors.service_package_id" class="mt-1 block text-xs font-semibold text-error-600">{{ form.errors.service_package_id }}</span>
-                </label>
+                <template v-if="form.pricing_source === 'package'">
+                    <label class="block">
+                        <span class="mb-1.5 block text-sm font-medium text-gray-700">{{ t('contractsAdmin.service', 'Service') }}</span>
+                        <select v-model.number="form.service_id" class="ta-input h-11 w-full px-4 text-sm" :dir="textDirection(selectedServiceText)" @change="applyPackageServiceDefaults">
+                            <option v-for="item in packageServiceOptions" :key="item.id" :value="item.id" :dir="textDirection(item.title)">
+                                {{ item.title }}
+                            </option>
+                        </select>
+                        <span v-if="form.errors.service_id" class="mt-1 block text-xs font-semibold text-error-600">{{ form.errors.service_id }}</span>
+                    </label>
+
+                    <label class="block">
+                        <span class="mb-1.5 block text-sm font-medium text-gray-700">{{ t('contractsAdmin.package', 'Package') }}</span>
+                        <select v-model.number="form.service_package_id" class="ta-input h-11 w-full px-4 text-sm" :dir="textDirection(selectedPackageText)" :disabled="availableServicePackages.length === 0" @change="applyPackageDefaults">
+                            <option v-for="item in availableServicePackages" :key="item.id" :value="item.id" :dir="textDirection(packageLabel(item))">
+                                {{ packageLabel(item) }}
+                            </option>
+                        </select>
+                        <span v-if="availableServicePackages.length === 0" class="mt-1 block text-xs font-semibold text-warning-600">
+                            {{ t('contractsAdmin.noPackagesForSelectedService', 'No active packages for this service.') }}
+                        </span>
+                        <span v-if="form.errors.service_package_id" class="mt-1 block text-xs font-semibold text-error-600">{{ form.errors.service_package_id }}</span>
+                    </label>
+                </template>
 
                 <label v-else class="block sm:col-span-2">
                     <span class="mb-1.5 block text-sm font-medium text-gray-700">{{ t('contractsAdmin.service', 'Service') }}</span>

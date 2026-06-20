@@ -2,8 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\User;
+use App\Models\Visit;
+use App\Models\Worker;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -86,6 +89,11 @@ class AdminFinanceEnhancementTest extends TestCase
                 ->where('cheques.0.amount_sar', '75.00')
                 ->where('creditNotes.0.number', 'CN-2026-00001')
                 ->where('creditNotes.0.amount_sar', '25.00')
+                ->missing('expenses')
+                ->missing('expenseSummary')
+                ->missing('expenseCategories')
+                ->missing('expenseTypes')
+                ->missing('expenseStatuses')
             );
     }
 
@@ -116,48 +124,218 @@ class AdminFinanceEnhancementTest extends TestCase
         ]);
     }
 
-    public function test_accountant_can_record_operating_expense_with_vat_and_receipt(): void
+    public function test_accountant_can_review_customer_payment_proofs(): void
     {
         $this->withoutVite();
+        Carbon::setTestNow('2026-06-20 12:00:00');
 
         $accountant = User::factory()->create(['role' => 'accountant']);
-
-        $this->actingAs($accountant)->post('/app/finance/expenses', [
-            'expense_date' => '2026-06-18',
-            'expense_type' => 'operating_expense',
-            'category' => 'office_rent',
-            'vendor' => 'Riyadh Business Center',
-            'description' => 'Monthly office rent',
-            'amount_sar' => '850.75',
-            'vat_sar' => '110.97',
-            'payment_method' => 'bank_transfer',
-            'payment_reference' => 'EXP-TRX-1001',
-            'status' => 'paid',
-            'receipt_path' => 'expense-receipts/rent-june.pdf',
-        ])->assertRedirect();
-
-        $this->assertDatabaseHas('expenses', [
-            'expense_date' => '2026-06-18',
-            'expense_type' => 'operating_expense',
-            'category' => 'office_rent',
-            'vendor' => 'Riyadh Business Center',
-            'amount_halalas' => 85075,
-            'vat_halalas' => 11097,
-            'payment_method' => 'bank_transfer',
-            'status' => 'paid',
+        $invoice = Invoice::factory()->create([
+            'number' => 'INV-PROOF-ADMIN',
+            'gross_total_halalas' => 115000,
+            'paid_total_halalas' => 0,
+            'status' => 'sent',
         ]);
-        $this->assertDatabaseHas('audit_logs', [
-            'user_id' => $accountant->id,
-            'action' => 'expense.created',
+        $approveId = DB::table('payment_proofs')->insertGetId([
+            'customer_id' => $invoice->customer_id,
+            'invoice_id' => $invoice->id,
+            'amount_halalas' => 65000,
+            'method' => 'bank_transfer',
+            'reference' => 'BANK-PROOF-01',
+            'paid_on' => '2026-06-19',
+            'proof_path' => 'payment-proofs/bank-proof-01.pdf',
+            'customer_note' => 'First transfer',
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $rejectId = DB::table('payment_proofs')->insertGetId([
+            'customer_id' => $invoice->customer_id,
+            'invoice_id' => $invoice->id,
+            'amount_halalas' => 50000,
+            'method' => 'cash',
+            'reference' => 'CASH-PROOF-02',
+            'paid_on' => '2026-06-19',
+            'proof_path' => 'payment-proofs/cash-proof-02.pdf',
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($accountant)
+            ->get('/app/finance')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Finance/Index')
+                ->where('metrics.pendingPaymentProofs', 115000)
+                ->where('paymentProofs.0.invoice_number', 'INV-PROOF-ADMIN')
+                ->where('paymentProofs.0.reference', 'BANK-PROOF-01'));
+
+        $this->actingAs($accountant)
+            ->patch("/app/finance/payment-proofs/{$approveId}/approve", [
+                'admin_note' => 'Verified in bank statement.',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('payment_proofs', [
+            'id' => $approveId,
+            'status' => 'approved',
+            'reviewed_by' => $accountant->id,
+            'admin_note' => 'Verified in bank statement.',
+        ]);
+        $this->assertDatabaseHas('payments', [
+            'invoice_id' => $invoice->id,
+            'amount_halalas' => 65000,
+            'method' => 'bank_transfer',
+            'reference' => 'BANK-PROOF-01',
+        ]);
+        $this->assertSame(65000, $invoice->refresh()->paid_total_halalas);
+        $this->assertSame('partial', $invoice->status);
+
+        $this->actingAs($accountant)
+            ->patch("/app/finance/payment-proofs/{$rejectId}/reject", [
+                'admin_note' => 'Receipt is not readable.',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('payment_proofs', [
+            'id' => $rejectId,
+            'status' => 'rejected',
+            'reviewed_by' => $accountant->id,
+            'admin_note' => 'Receipt is not readable.',
+        ]);
+        $this->assertSame(65000, $invoice->refresh()->paid_total_halalas);
+    }
+
+    public function test_accountant_can_invoice_approved_overtime_once(): void
+    {
+        $this->withoutVite();
+        Carbon::setTestNow('2026-06-19 11:00:00');
+
+        $accountant = User::factory()->create(['role' => 'accountant']);
+        $contract = Contract::factory()->create([
+            'reference' => 'CON-OT-001',
+            'extra_hour_rate_halalas' => 12000,
+            'overtime_policy' => 'charge_after_planned_time',
+            'prices_include_vat' => false,
+            'vat_rate' => 15,
+        ]);
+        $worker = Worker::factory()->create();
+        $visit = Visit::create([
+            'contract_id' => $contract->id,
+            'worker_id' => $worker->id,
+            'customer_site_id' => $contract->customer_site_id,
+            'service_id' => $contract->service_id,
+            'scheduled_for' => '2026-06-18',
+            'starts_at' => '08:00',
+            'ends_at' => '10:00',
+            'status' => 'completed',
+            'checked_in_at' => '2026-06-18 08:00:00',
+            'checked_out_at' => '2026-06-18 10:30:00',
+            'planned_minutes' => 120,
+            'actual_minutes' => 150,
+            'variance_minutes' => 30,
+            'overtime_minutes' => 30,
+            'billable_overtime_minutes' => 30,
+            'overtime_status' => 'approved',
+            'billable_overtime_halalas' => 6000,
         ]);
 
         $this->actingAs($accountant)->get('/app/finance')
+            ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('expenseSummary.operating_expenses_halalas', 85075)
-                ->where('expenseSummary.vat_halalas', 11097)
-                ->where('expenses.0.vendor', 'Riyadh Business Center')
-                ->where('expenses.0.amount_sar', '850.75')
+                ->where('billableExtras.0.visit_id', $visit->id)
+                ->where('billableExtras.0.contract', 'CON-OT-001')
+                ->where('billableExtras.0.minutes', 30)
+                ->where('billableExtras.0.amount_halalas', 6000)
+                ->where('billableExtras.0.amount_sar', '60.00')
             );
+
+        $this->actingAs($accountant)->post("/app/finance/billable-extras/visits/{$visit->id}/invoice")
+            ->assertRedirect();
+
+        $invoice = Invoice::query()
+            ->where('contract_id', $contract->id)
+            ->where('gross_total_halalas', 6900)
+            ->firstOrFail();
+
+        $this->assertSame(6000, $invoice->net_total_halalas);
+        $this->assertSame(900, $invoice->vat_total_halalas);
+        $this->assertSame($invoice->id, $visit->refresh()->overtime_invoice_id);
+        $this->assertNotNull($visit->overtime_billed_at);
+        $this->assertDatabaseHas('invoice_line_items', [
+            'invoice_id' => $invoice->id,
+            'visit_id' => $visit->id,
+            'line_type' => 'overtime',
+            'description' => 'Extra time: 30 minutes',
+            'quantity' => 30,
+            'unit_label' => 'minute',
+            'unit_price_halalas' => 200,
+            'net_total_halalas' => 6000,
+            'vat_total_halalas' => 900,
+            'gross_total_halalas' => 6900,
+        ]);
+
+        $this->actingAs($accountant)->get("/app/finance/invoices/{$invoice->id}/print")
+            ->assertOk()
+            ->assertSee('Extra time: 30 minutes')
+            ->assertSee('SAR 60.00')
+            ->assertSee('SAR 69.00');
+
+        $this->actingAs($accountant)->get('/app/finance')
+            ->assertInertia(fn (AssertableInertia $page) => $page->missing('billableExtras.0'));
+
+        $this->actingAs($accountant)->post("/app/finance/billable-extras/visits/{$visit->id}/invoice")
+            ->assertSessionHasErrors('visit_id');
+    }
+
+    public function test_inclusive_vat_overtime_invoice_keeps_net_line_unit_price(): void
+    {
+        $this->withoutVite();
+        Carbon::setTestNow('2026-06-19 11:00:00');
+
+        $accountant = User::factory()->create(['role' => 'accountant']);
+        $contract = Contract::factory()->create([
+            'prices_include_vat' => true,
+            'vat_rate' => 15,
+        ]);
+        $worker = Worker::factory()->create();
+        $visit = Visit::create([
+            'contract_id' => $contract->id,
+            'worker_id' => $worker->id,
+            'customer_site_id' => $contract->customer_site_id,
+            'service_id' => $contract->service_id,
+            'scheduled_for' => '2026-06-18',
+            'starts_at' => '08:00',
+            'ends_at' => '10:00',
+            'status' => 'completed',
+            'planned_minutes' => 120,
+            'actual_minutes' => 150,
+            'variance_minutes' => 30,
+            'overtime_minutes' => 30,
+            'billable_overtime_minutes' => 30,
+            'overtime_status' => 'approved',
+            'billable_overtime_halalas' => 6900,
+        ]);
+
+        $this->actingAs($accountant)->post("/app/finance/billable-extras/visits/{$visit->id}/invoice")
+            ->assertRedirect();
+
+        $invoice = Invoice::query()->where('contract_id', $contract->id)->firstOrFail();
+
+        $this->assertSame(6000, $invoice->net_total_halalas);
+        $this->assertSame(900, $invoice->vat_total_halalas);
+        $this->assertSame(6900, $invoice->gross_total_halalas);
+        $this->assertDatabaseHas('invoice_line_items', [
+            'invoice_id' => $invoice->id,
+            'visit_id' => $visit->id,
+            'line_type' => 'overtime',
+            'quantity' => 30,
+            'unit_price_halalas' => 200,
+            'net_total_halalas' => 6000,
+            'vat_total_halalas' => 900,
+            'gross_total_halalas' => 6900,
+        ]);
     }
 
     public function test_clearing_cheque_records_invoice_payment(): void

@@ -28,6 +28,7 @@ class ServicePackage extends Model
         'vat_rate',
         'prices_include_vat',
         'checklist_template',
+        'sla_kpi_template',
         'is_active',
     ];
 
@@ -44,6 +45,7 @@ class ServicePackage extends Model
             'vat_rate' => 'integer',
             'prices_include_vat' => 'boolean',
             'checklist_template' => 'array',
+            'sla_kpi_template' => 'array',
             'is_active' => 'boolean',
         ];
     }

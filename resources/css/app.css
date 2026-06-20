@@ -102,14 +102,20 @@
         position: relative;
         display: flex;
         align-items: center;
+        justify-content: flex-start;
         gap: 0.75rem;
+        width: 100%;
+        border: 0;
         border-radius: 0.625rem;
+        background: transparent;
         padding: 0.625rem 0.75rem;
         font-size: 0.875rem;
         font-weight: 500;
         line-height: 1.25rem;
+        text-align: start;
         color: #344054;
         transition: background-color 160ms ease, color 160ms ease;
+        appearance: none;
     }
 
     .ta-menu-item:hover {
