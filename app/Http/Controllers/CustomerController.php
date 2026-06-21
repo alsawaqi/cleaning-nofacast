@@ -18,6 +18,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -198,14 +199,30 @@ class CustomerController extends Controller
      */
     private function validateCustomer(Request $request, ?Customer $customer = null): array
     {
+        if ($request->filled('email')) {
+            $request->merge([
+                'email' => Str::lower($request->string('email')->trim()->toString()),
+            ]);
+        }
+
         $catalog = $this->catalog();
         $locationCatalog = $this->locationCatalog();
+        $uniqueCustomerEmail = Rule::unique('customers', 'email');
+        $uniqueUserEmail = Rule::unique('users', 'email');
+
+        if ($customer) {
+            $uniqueCustomerEmail->ignore($customer->id);
+
+            if ($customer->user_id) {
+                $uniqueUserEmail->ignore($customer->user_id);
+            }
+        }
 
         $validated = $request->validate([
             'customer_type' => ['required', Rule::in($this->catalogKeys($catalog['customerTypes']))],
             'name' => ['required', 'string', 'max:180'],
             'phone' => ['nullable', 'string', 'max:32'],
-            'email' => ['nullable', 'email', 'max:180'],
+            'email' => ['nullable', 'email', 'max:180', $uniqueCustomerEmail, $uniqueUserEmail],
             'preferred_channel' => ['required', Rule::in($this->catalogKeys($catalog['channels']))],
             'preferred_locale' => ['required', Rule::in(config('cleanops.supported_locales', ['ar', 'en']))],
             'vat_number' => ['nullable', 'string', 'max:32'],

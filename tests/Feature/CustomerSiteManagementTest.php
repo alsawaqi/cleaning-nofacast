@@ -299,6 +299,27 @@ class CustomerSiteManagementTest extends TestCase
         ]);
     }
 
+    public function test_manager_cannot_create_duplicate_customer_or_user_email(): void
+    {
+        $this->withoutVite();
+
+        $manager = User::factory()->create(['role' => 'operations']);
+        Customer::factory()->create(['email' => 'duplicate.customer@example.test']);
+        User::factory()->create(['email' => 'existing.user@example.test']);
+
+        $this->actingAs($manager)
+            ->post('/app/customers', $this->customerPayload([
+                'email' => 'duplicate.customer@example.test',
+            ]))
+            ->assertSessionHasErrors(['email']);
+
+        $this->actingAs($manager)
+            ->post('/app/customers', $this->customerPayload([
+                'email' => 'existing.user@example.test',
+            ]))
+            ->assertSessionHasErrors(['email']);
+    }
+
     public function test_manager_can_save_customer_site_map_location(): void
     {
         $this->withoutVite();

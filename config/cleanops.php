@@ -3,6 +3,15 @@
 return [
     'supported_locales' => ['ar', 'en'],
 
+    'admin_seed' => [
+        'name' => env('ADMIN_NAME', 'Nofa Clean Owner'),
+        'email' => env('ADMIN_EMAIL', 'admin@nofaclean.com'),
+        'phone' => env('ADMIN_PHONE'),
+        'password' => env('ADMIN_PASSWORD'),
+        'role' => env('ADMIN_ROLE', 'owner'),
+        'locale' => env('ADMIN_LOCALE', 'ar'),
+    ],
+
     'default_settings' => [
         'company.name' => [
             'value' => 'Trust Palace Trading',

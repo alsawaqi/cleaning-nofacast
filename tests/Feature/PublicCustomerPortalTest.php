@@ -70,6 +70,52 @@ class PublicCustomerPortalTest extends TestCase
         ]);
     }
 
+    public function test_customer_registration_links_existing_admin_customer_by_email_without_duplication(): void
+    {
+        $existingCustomer = Customer::factory()->create([
+            'user_id' => null,
+            'name' => 'Admin Entered Customer',
+            'email' => 'linked.customer@example.test',
+            'phone' => '+966500000111',
+            'preferred_locale' => 'ar',
+            'status' => 'prospect',
+        ]);
+        CustomerSite::factory()->for($existingCustomer)->create([
+            'name' => 'Admin Entered Villa',
+            'city' => 'Riyadh',
+            'district' => 'Al Malaz',
+            'is_default' => true,
+        ]);
+
+        $this->post('/register', [
+            'name' => 'Portal Customer Name',
+            'email' => 'linked.customer@example.test',
+            'phone' => '+966500999888',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'customer_type' => 'individual',
+            'city' => 'Jeddah',
+            'district' => 'Corniche',
+            'address' => 'Portal address should not create a duplicate site',
+            'preferred_locale' => 'en',
+        ])->assertRedirect('/app/customer');
+
+        $user = User::query()->where('email', 'linked.customer@example.test')->firstOrFail();
+        $existingCustomer->refresh();
+
+        $this->assertAuthenticatedAs($user);
+        $this->assertSame($user->id, $existingCustomer->user_id);
+        $this->assertSame('Admin Entered Customer', $existingCustomer->name);
+        $this->assertSame('active', $existingCustomer->status);
+        $this->assertSame(1, Customer::query()->where('email', 'linked.customer@example.test')->count());
+        $this->assertSame(1, CustomerSite::query()->where('customer_id', $existingCustomer->id)->count());
+        $this->assertDatabaseHas('customer_sites', [
+            'customer_id' => $existingCustomer->id,
+            'name' => 'Admin Entered Villa',
+            'is_default' => true,
+        ]);
+    }
+
     public function test_login_redirects_each_role_to_the_correct_portal(): void
     {
         $owner = User::factory()->create([
